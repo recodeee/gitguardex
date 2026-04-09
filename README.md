@@ -7,6 +7,18 @@ Simple, hardened multi-agent safety setup for any git repo.
 > [!WARNING]
 > Not affiliated with OpenAI or Codex. Not an official tool.
 
+## Why this tool exists
+
+If you run multiple agents at the same time, it is easy to get collisions:
+two agents editing the same files, unsafe deletes, broken branch flow, or
+confusing ownership.
+
+`musafety` adds strict guardrails so parallel agent work stays safe and predictable.
+
+![Multi-agent dashboard example](docs/images/dashboard-multi-agent.png)
+
+The dashboard above is the exact kind of parallel workflow this tool is built for.
+
 ## Install
 
 ```sh
