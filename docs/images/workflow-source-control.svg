@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1360" viewBox="0 0 1080 1360" role="img" aria-labelledby="title desc">
+  <title id="title">multi-agent branch visibility screenshot</title>
+  <desc id="desc">Illustrative IDE source control panel view with multiple agent branches and protected dev branch visible.</desc>
+  <rect width="1080" height="1360" fill="#1e1e1e"/>
+  <rect x="0" y="0" width="1080" height="74" fill="#252526"/>
+  <text x="26" y="48" font-size="30" fill="#d4d4d4" font-family="Inter, Segoe UI, Arial, sans-serif">SOURCE CONTROL</text>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" fill="#d4d4d4">
+    <rect x="16" y="110" width="1048" height="182" rx="8" fill="#24292f"/>
+    <text x="40" y="154">agent/assistant/20260410-branch-start-flow</text>
+    <text x="40" y="198" fill="#8b949e">Message (Ctrl+Enter to commit on agent branch)</text>
+    <rect x="56" y="220" width="968" height="50" rx="6" fill="#0e639c"/>
+    <text x="476" y="255" fill="#d4d4d4">Commit</text>
+
+    <rect x="16" y="316" width="1048" height="182" rx="8" fill="#1f6feb22" stroke="#1f6feb"/>
+    <text x="40" y="360">codex-lb</text>
+    <text x="870" y="360" fill="#8b949e">branch: dev</text>
+    <text x="40" y="404" fill="#8b949e">Protected integration branch</text>
+    <rect x="56" y="426" width="968" height="50" rx="6" fill="#0e639c"/>
+    <text x="476" y="461" fill="#d4d4d4">Commit</text>
+
+    <rect x="16" y="522" width="1048" height="182" rx="8" fill="#24292f"/>
+    <text x="40" y="566">agent/integrator/20260410-verify-guardrails</text>
+    <text x="40" y="610" fill="#8b949e">Message (Ctrl+Enter to commit on integrator branch)</text>
+    <rect x="56" y="632" width="968" height="50" rx="6" fill="#0e639c"/>
+    <text x="476" y="667" fill="#d4d4d4">Commit</text>
+
+    <rect x="16" y="728" width="1048" height="182" rx="8" fill="#24292f"/>
+    <text x="40" y="772">agent/reviewer/20260410-lock-protocol-audit</text>
+    <text x="40" y="816" fill="#8b949e">Message (Ctrl+Enter to commit on reviewer branch)</text>
+    <rect x="56" y="838" width="968" height="50" rx="6" fill="#0e639c"/>
+    <text x="476" y="873" fill="#d4d4d4">Commit</text>
+  </g>
+
+  <g font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24" fill="#8b949e">
+    <text x="26" y="980">Multi-agent safety pattern:</text>
+    <text x="54" y="1022">• agents work on isolated branches</text>
+    <text x="54" y="1060">• each branch owns explicit file locks</text>
+    <text x="54" y="1098">• changes integrate back through guarded finish script</text>
+    <text x="54" y="1136">• dev/main stay protected from direct unsafe commits</text>
+  </g>
+</svg>

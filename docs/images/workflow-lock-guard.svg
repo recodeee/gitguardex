@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="940" viewBox="0 0 1400 940" role="img" aria-labelledby="title desc">
+  <title id="title">musafety lock claim and deletion guard screenshot</title>
+  <desc id="desc">Illustrative terminal screenshot showing file claim, deletion block, and explicit allow-delete flow.</desc>
+  <defs>
+    <linearGradient id="bg2" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="100%" stop-color="#080d18"/>
+    </linearGradient>
+  </defs>
+  <rect width="1400" height="940" fill="url(#bg2)"/>
+  <rect x="24" y="20" width="1352" height="900" rx="14" fill="#0f172a" stroke="#25314a"/>
+  <circle cx="54" cy="48" r="8" fill="#ef4444"/>
+  <circle cx="78" cy="48" r="8" fill="#f59e0b"/>
+  <circle cx="102" cy="48" r="8" fill="#22c55e"/>
+  <text x="130" y="53" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16">lock + delete guard protocol</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" fill="#e2e8f0">
+    <text x="44" y="98">$ python3 scripts/agent-file-locks.py claim --branch agent/anna frontend/src/account.tsx</text>
+    <text x="44" y="134" fill="#86efac">[locks] claimed: frontend/src/account.tsx by agent/anna</text>
+
+    <text x="44" y="188">$ git rm frontend/src/account.tsx</text>
+    <text x="44" y="224">$ python3 scripts/agent-file-locks.py validate --branch agent/anna --staged</text>
+    <text x="44" y="260" fill="#fca5a5">[locks] Delete not approved: frontend/src/account.tsx</text>
+    <text x="44" y="296" fill="#fca5a5">[locks] ❌ blocked to prevent cross-agent logic loss</text>
+
+    <text x="44" y="356">Need explicit delete approval first:</text>
+    <text x="70" y="392">python3 scripts/agent-file-locks.py allow-delete --branch agent/anna frontend/src/account.tsx</text>
+    <text x="70" y="428" fill="#86efac">[locks] allow_delete=true for frontend/src/account.tsx</text>
+
+    <text x="44" y="488">Re-validate staged changes:</text>
+    <text x="70" y="524">python3 scripts/agent-file-locks.py validate --branch agent/anna --staged</text>
+    <text x="70" y="560" fill="#86efac">[locks] ✅ validation passed</text>
+
+    <text x="44" y="626">Safety guarantees:</text>
+    <text x="70" y="662" fill="#cbd5e1">• accidental deletions are blocked by default</text>
+    <text x="70" y="698" fill="#cbd5e1">• destructive changes require explicit intent</text>
+    <text x="70" y="734" fill="#cbd5e1">• pre-commit hook enforces protocol every commit</text>
+
+    <text x="44" y="804" fill="#86efac">Protocol status: SAFE DELETE FLOW VERIFIED</text>
+  </g>
+</svg>

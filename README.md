@@ -38,6 +38,20 @@ That one command runs:
 
 ![musafety setup success screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/setup-success.svg)
 
+## Workflow protocol screenshots
+
+### 1) Start isolated agent branch/worktree
+
+![musafety branch start protocol screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-branch-start.svg)
+
+### 2) Lock claim + deletion guard protocol
+
+![musafety lock and delete guard screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-lock-guard.svg)
+
+### 3) Multi-agent branch visibility (IDE/source control style)
+
+![musafety source control multi-agent screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-source-control.svg)
+
 ## Copy prompt for your AI (Codex / Claude)
 
 ```sh
@@ -139,6 +153,7 @@ npm pack --dry-run
 - If tools are already present, setup skips global install automatically.
 - Interactive approval is now strict `[y/n]` (waits for explicit answer).
 - Added setup screenshot to README.
+- Added 3 additional workflow screenshots (branch start, lock/delete guard, source-control view).
 
 ### v0.4.1
 
