@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_BRANCH="dev"
+BASE_BRANCH=""
 BASE_BRANCH_EXPLICIT=0
 SOURCE_BRANCH=""
 PUSH_ENABLED=1
@@ -42,15 +42,67 @@ fi
 repo_root="$(git rev-parse --show-toplevel)"
 current_worktree="$(pwd -P)"
 
-if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
-  configured_base="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
-  if [[ -n "$configured_base" ]]; then
-    BASE_BRANCH="$configured_base"
-  fi
-fi
-
 if [[ -z "$SOURCE_BRANCH" ]]; then
   SOURCE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+fi
+
+if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${SOURCE_BRANCH}"; then
+  echo "[agent-branch-finish] Local source branch does not exist: ${SOURCE_BRANCH}" >&2
+  exit 1
+fi
+
+branch_exists_local_or_remote() {
+  local branch="$1"
+  git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch}" \
+    || git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${branch}"
+}
+
+resolve_base_branch() {
+  local configured
+  configured="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -n "$configured" ]] && branch_exists_local_or_remote "$configured"; then
+    printf '%s' "$configured"
+    return
+  fi
+
+  local current_branch
+  current_branch="$(git -C "$repo_root" branch --show-current || true)"
+  if [[ -n "$current_branch" && "$current_branch" != agent/* ]] && branch_exists_local_or_remote "$current_branch"; then
+    printf '%s' "$current_branch"
+    return
+  fi
+
+  local remote_head
+  remote_head="$(git -C "$repo_root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  remote_head="${remote_head#origin/}"
+  if [[ -n "$remote_head" ]] && branch_exists_local_or_remote "$remote_head"; then
+    printf '%s' "$remote_head"
+    return
+  fi
+
+  local candidate
+  for candidate in dev main master; do
+    if branch_exists_local_or_remote "$candidate"; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
+
+  if [[ -n "$current_branch" && "$current_branch" != agent/* ]]; then
+    printf '%s' "$current_branch"
+    return
+  fi
+
+  printf 'dev'
+}
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="$(resolve_base_branch)"
+fi
+
+if ! branch_exists_local_or_remote "$BASE_BRANCH"; then
+  echo "[agent-branch-finish] Base branch not found locally or on origin: ${BASE_BRANCH}" >&2
+  exit 1
 fi
 
 if [[ "$SOURCE_BRANCH" == "$BASE_BRANCH" ]]; then
@@ -59,9 +111,11 @@ if [[ "$SOURCE_BRANCH" == "$BASE_BRANCH" ]]; then
   exit 1
 fi
 
-if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${SOURCE_BRANCH}"; then
-  echo "[agent-branch-finish] Local source branch does not exist: ${SOURCE_BRANCH}" >&2
-  exit 1
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
+  current_configured_base="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -z "$current_configured_base" ]] && [[ -n "$BASE_BRANCH" ]]; then
+    git -C "$repo_root" config multiagent.baseBranch "$BASE_BRANCH" >/dev/null 2>&1 || true
+  fi
 fi
 
 get_worktree_for_branch() {
@@ -93,6 +147,12 @@ fi
 if ! is_clean_worktree "$source_worktree"; then
   echo "[agent-branch-finish] Source worktree is not clean for '${SOURCE_BRANCH}': ${source_worktree}" >&2
   echo "[agent-branch-finish] Commit/stash changes on the source branch before finishing." >&2
+  exit 1
+fi
+
+if [[ "$PUSH_ENABLED" -eq 1 ]] && ! git -C "$repo_root" remote get-url origin >/dev/null 2>&1; then
+  echo "[agent-branch-finish] Push is enabled but remote 'origin' is missing." >&2
+  echo "[agent-branch-finish] Add an origin remote or rerun with --no-push." >&2
   exit 1
 fi
 
@@ -170,6 +230,7 @@ if ! git -C "$integration_worktree" merge --no-ff --no-edit "$SOURCE_BRANCH"; th
 fi
 
 if [[ "$PUSH_ENABLED" -eq 1 ]]; then
+  git -C "$source_worktree" push --set-upstream origin "$SOURCE_BRANCH"
   git -C "$integration_worktree" push origin "HEAD:${BASE_BRANCH}"
 fi
 

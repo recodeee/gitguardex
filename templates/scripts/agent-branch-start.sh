@@ -3,7 +3,8 @@ set -euo pipefail
 
 TASK_NAME="task"
 AGENT_NAME="agent"
-BASE_BRANCH="dev"
+BASE_BRANCH=""
+BASE_BRANCH_EXPLICIT=0
 WORKTREE_MODE=1
 ALLOW_IN_PLACE=0
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
@@ -20,7 +21,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --base)
-      BASE_BRANCH="${2:-dev}"
+      BASE_BRANCH="${2:-}"
+      BASE_BRANCH_EXPLICIT=1
       shift 2
       ;;
     --in-place)
@@ -71,6 +73,7 @@ fi
 
 if [[ "${#POSITIONAL_ARGS[@]}" -ge 3 ]]; then
   BASE_BRANCH="${POSITIONAL_ARGS[2]}"
+  BASE_BRANCH_EXPLICIT=1
 fi
 
 sanitize_slug() {
@@ -89,6 +92,62 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
+
+branch_exists_local_or_remote() {
+  local branch="$1"
+  git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch}" \
+    || git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${branch}"
+}
+
+resolve_base_branch() {
+  local configured
+  configured="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -n "$configured" ]] && branch_exists_local_or_remote "$configured"; then
+    printf '%s' "$configured"
+    return
+  fi
+
+  local current_branch
+  current_branch="$(git -C "$repo_root" branch --show-current || true)"
+  if [[ -n "$current_branch" && "$current_branch" != agent/* ]] && branch_exists_local_or_remote "$current_branch"; then
+    printf '%s' "$current_branch"
+    return
+  fi
+
+  local remote_head
+  remote_head="$(git -C "$repo_root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  remote_head="${remote_head#origin/}"
+  if [[ -n "$remote_head" ]] && branch_exists_local_or_remote "$remote_head"; then
+    printf '%s' "$remote_head"
+    return
+  fi
+
+  local candidate
+  for candidate in dev main master; do
+    if branch_exists_local_or_remote "$candidate"; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
+
+  if [[ -n "$current_branch" && "$current_branch" != agent/* ]]; then
+    printf '%s' "$current_branch"
+    return
+  fi
+
+  printf 'dev'
+}
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  BASE_BRANCH="$(resolve_base_branch)"
+fi
+
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
+  current_configured_base="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -z "$current_configured_base" ]] && [[ -n "$BASE_BRANCH" ]]; then
+    git -C "$repo_root" config multiagent.baseBranch "$BASE_BRANCH" >/dev/null 2>&1 || true
+  fi
+fi
 
 if git show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
   git fetch origin "${BASE_BRANCH}" --quiet

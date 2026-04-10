@@ -50,6 +50,14 @@ function createFakeScorecardScript(scriptBody) {
   return fakePath;
 }
 
+function createFakeDockerScript(scriptBody) {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-fake-docker-'));
+  const fakePath = path.join(fakeBin, 'docker');
+  fs.writeFileSync(fakePath, `#!/usr/bin/env bash\nset -e\n${scriptBody}\n`, 'utf8');
+  fs.chmodSync(fakePath, 0o755);
+  return fakePath;
+}
+
 function initRepo() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-'));
   const repoDir = path.join(tempDir, 'repo');
@@ -81,6 +89,21 @@ function initRepoOnBranch(branchName) {
   return repoDir;
 }
 
+function initRepoWithMainAndAgentBranch() {
+  const repoDir = initRepo();
+
+  commitFile(repoDir, 'seed.txt', 'seed\n', 'seed dev');
+
+  let result = runCmd('git', ['checkout', '-b', 'main'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  commitFile(repoDir, 'main.txt', 'main\n', 'seed main');
+
+  result = runCmd('git', ['checkout', '-b', 'agent/main-view'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  return repoDir;
+}
+
 function seedCommit(repoDir) {
   let result = runCmd('git', ['add', '.'], repoDir);
   assert.equal(result.status, 0, result.stderr);
@@ -91,7 +114,7 @@ function seedCommit(repoDir) {
   assert.equal(result.status, 0, result.stderr);
 }
 
-function attachOriginRemote(repoDir) {
+function attachOriginRemote(repoDir, baseBranch = 'dev') {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-origin-'));
   const originPath = path.join(tempDir, 'origin.git');
 
@@ -101,7 +124,7 @@ function attachOriginRemote(repoDir) {
   result = runCmd('git', ['remote', 'add', 'origin', originPath], repoDir);
   assert.equal(result.status, 0, result.stderr);
 
-  result = runCmd('git', ['push', '-u', 'origin', 'dev'], repoDir);
+  result = runCmd('git', ['push', '-u', 'origin', baseBranch], repoDir);
   assert.equal(result.status, 0, result.stderr);
 
   return originPath;
@@ -162,6 +185,7 @@ test('setup provisions workflow files and repo config', () => {
     'scripts/install-agent-git-hooks.sh',
     'scripts/openspec/init-plan-workspace.sh',
     '.githooks/pre-commit',
+    '.githooks/post-commit',
     '.codex/skills/musafety/SKILL.md',
     '.claude/commands/musafety.md',
     '.omx/state/agent-file-locks.json',
@@ -180,7 +204,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(packageJson.scripts['agent:branch:sync'], 'musafety sync');
   assert.equal(packageJson.scripts['agent:branch:sync:check'], 'musafety sync --check');
   assert.equal(packageJson.scripts['agent:safety:setup'], 'musafety setup');
-  assert.equal(packageJson.scripts['agent:cleanup'], 'bash ./scripts/agent-worktree-prune.sh --base dev');
+  assert.equal(packageJson.scripts['agent:cleanup'], 'bash ./scripts/agent-worktree-prune.sh');
 
   const agentsContent = fs.readFileSync(path.join(repoDir, 'AGENTS.md'), 'utf8');
   assert.equal(agentsContent.includes('<!-- multiagent-safety:START -->'), true);
@@ -190,6 +214,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.match(gitignoreContent, /scripts\/agent-branch-start\.sh/);
   assert.match(gitignoreContent, /scripts\/agent-file-locks\.py/);
   assert.match(gitignoreContent, /\.githooks\/pre-commit/);
+  assert.match(gitignoreContent, /\.githooks\/post-commit/);
   assert.match(gitignoreContent, /\.codex\/skills\/musafety\/SKILL\.md/);
   assert.match(gitignoreContent, /\.claude\/commands\/musafety\.md/);
   assert.match(gitignoreContent, /\.omx\/state\/agent-file-locks\.json/);
@@ -203,11 +228,75 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
 });
 
+test('setup refreshes existing musafety AGENTS block when template changes', () => {
+  const repoDir = initRepo();
+  fs.writeFileSync(
+    path.join(repoDir, 'AGENTS.md'),
+    '# AGENTS\n\nLegacy header\n\n<!-- multiagent-safety:START -->\nOLD MANAGED CONTENT\n<!-- multiagent-safety:END -->\n',
+    'utf8',
+  );
+
+  const result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const agents = fs.readFileSync(path.join(repoDir, 'AGENTS.md'), 'utf8');
+  assert.match(agents, /AUTONOMY DIRECTIVE/);
+  assert.match(agents, /Branching policy \(always enforce\):/);
+  assert.equal(agents.includes('OLD MANAGED CONTENT'), false);
+  const markerStarts = agents.match(/<!-- multiagent-safety:START -->/g) || [];
+  assert.equal(markerStarts.length, 1, 'managed AGENTS block should remain unique');
+});
+
+test('setup auto-creates main view worktree + workspace for SCM dual-repo view', () => {
+  const repoDir = initRepoWithMainAndAgentBranch();
+  const mainWorktreePath = `${repoDir}-main`;
+  const workspacePath = `${repoDir}-branches.code-workspace`;
+
+  const result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  assert.equal(fs.existsSync(mainWorktreePath), true, 'main view worktree should be created');
+  const branchResult = runCmd('git', ['rev-parse', '--abbrev-ref', 'HEAD'], mainWorktreePath);
+  assert.equal(branchResult.status, 0, branchResult.stderr || branchResult.stdout);
+  assert.equal(branchResult.stdout.trim(), 'main');
+
+  assert.equal(fs.existsSync(workspacePath), true, 'workspace file should be created');
+  const workspace = JSON.parse(fs.readFileSync(workspacePath, 'utf8'));
+  assert.equal(workspace.settings['scm.alwaysShowRepositories'], true);
+  const folderPaths = workspace.folders.map((entry) => entry.path);
+  assert.equal(folderPaths.includes(repoDir), true);
+  assert.equal(folderPaths.includes(mainWorktreePath), true);
+});
+
+test('setup --no-main-view skips main view worktree + workspace creation', () => {
+  const repoDir = initRepoWithMainAndAgentBranch();
+  const mainWorktreePath = `${repoDir}-main`;
+  const workspacePath = `${repoDir}-branches.code-workspace`;
+
+  const result = runNode(['setup', '--target', repoDir, '--no-global-install', '--no-main-view'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  assert.equal(fs.existsSync(mainWorktreePath), false, 'main view worktree should be skipped');
+  assert.equal(fs.existsSync(workspacePath), false, 'workspace file should be skipped');
+});
+
+test('setup on main branch skips duplicate main view worktree', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+  const mainWorktreePath = `${repoDir}-main`;
+
+  const result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(mainWorktreePath), false, 'duplicate main view should be skipped when already on main');
+  assert.match(result.stdout, /main branch view skipped \(current branch is main; generate from agent branch\)/);
+});
+
 test('default invocation runs non-mutating status output', () => {
   const repoDir = initRepo();
 
   const result = runNode([], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /COMMIT WITH CONFIDENCE/);
   assert.match(result.stdout, /\[musafety\] CLI:/);
   assert.match(result.stdout, /\[musafety\] Global services:/);
   assert.match(result.stdout, /\[musafety\] Repo safety service:/);
@@ -236,7 +325,7 @@ test('default invocation outside git repo reports inactive repo service', () => 
   assert.match(result.stdout, /Repo safety service: .*inactive/);
 });
 
-test('default invocation checks for update and can auto-approve latest install', () => {
+test('default invocation in non-interactive mode does not auto-install update even with approval env set', () => {
   const repoDir = initRepo();
   const markerPath = path.join(repoDir, '.self-update-called');
   const fakeNpm = createFakeNpmScript(`
@@ -264,10 +353,39 @@ exit 1
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /UPDATE AVAILABLE/);
-  assert.match(result.stdout, new RegExp(`Current:\\s+${escapeRegexLiteral(cliVersion)}`));
-  assert.match(result.stdout, /Latest\s+:\s+9\.9\.9/);
-  assert.match(result.stdout, /Updated to latest published version/);
-  assert.equal(fs.existsSync(markerPath), true, 'expected self-update command to run');
+  assert.match(result.stdout, /Non-interactive shell; skipping auto-update prompt\./);
+  assert.equal(fs.existsSync(markerPath), false, 'self-update should not run in non-interactive mode');
+});
+
+test('default invocation in non-interactive mode skips update when no explicit auto-approval is set', () => {
+  const repoDir = initRepo();
+  const markerPath = path.join(repoDir, '.self-update-called');
+  const fakeNpm = createFakeNpmScript(`
+if [[ "$1" == "view" ]]; then
+  echo '"9.9.9"'
+  exit 0
+fi
+if [[ "$1" == "list" ]]; then
+  echo '{"dependencies":{"oh-my-codex":{},"@fission-ai/openspec":{}}}'
+  exit 0
+fi
+if [[ "$1" == "i" && "$2" == "-g" && "$3" == "musafety@latest" ]]; then
+  echo "updated" > "${markerPath}"
+  exit 0
+fi
+echo "unexpected npm args: $*" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv([], repoDir, {
+    MUSAFETY_NPM_BIN: fakeNpm,
+    MUSAFETY_FORCE_UPDATE_CHECK: '1',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /UPDATE AVAILABLE/);
+  assert.match(result.stdout, /Non-interactive shell; skipping auto-update prompt\./);
+  assert.equal(fs.existsSync(markerPath), false, 'self-update should not run without explicit non-interactive approval');
 });
 
 test('status --json returns cli, services, and repo summary', () => {
@@ -283,6 +401,49 @@ test('status --json returns cli, services, and repo summary', () => {
   assert.equal(parsed.repo.inGitRepo, true);
   assert.equal(typeof parsed.repo.serviceStatus, 'string');
   assert.equal(parsed.repo.scan.repoRoot, repoDir);
+  assert.equal(parsed.repo.docker.required, false);
+  assert.equal(parsed.repo.docker.status, 'not-required');
+});
+
+test('status surfaces red-path Docker warning when repo requires Docker but daemon is unavailable', () => {
+  const repoDir = initRepo();
+  fs.writeFileSync(path.join(repoDir, 'docker-compose.yml'), 'services: {}\n', 'utf8');
+
+  const fakeDocker = createFakeDockerScript(`
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv(['status', '--target', repoDir], repoDir, {
+    MUSAFETY_DOCKER_BIN: fakeDocker,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Docker runtime: .*inactive/);
+  assert.match(result.stdout, /repo requires Docker/);
+  assert.match(result.stdout, /Docker check: Cannot connect to the Docker daemon/);
+});
+
+test('status --json reports docker.needsStart when repo requires Docker but daemon is unavailable', () => {
+  const repoDir = initRepo();
+  fs.writeFileSync(path.join(repoDir, 'docker-compose.yml'), 'services: {}\n', 'utf8');
+
+  const fakeDocker = createFakeDockerScript(`
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv(['status', '--target', repoDir, '--json'], repoDir, {
+    MUSAFETY_DOCKER_BIN: fakeDocker,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.repo.docker.required, true);
+  assert.equal(parsed.repo.docker.status, 'inactive');
+  assert.equal(parsed.repo.docker.needsStart, true);
+  assert.deepEqual(parsed.repo.docker.reasons, ['docker-compose.yml']);
+  assert.match(parsed.repo.docker.reason, /Cannot connect to the Docker daemon/);
 });
 
 test('setup appends managed gitignore block without clobbering existing entries', () => {
@@ -328,6 +489,21 @@ test('setup auto-refreshes managed pre-commit guard when template changed', () =
   assert.match(repaired, /\[codex-branch-guard\] Codex agent commit blocked on non-agent branch/);
 });
 
+test('setup auto-refreshes managed post-commit auto-finish hook when template changed', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  fs.writeFileSync(path.join(repoDir, '.githooks', 'post-commit'), '#!/usr/bin/env bash\nexit 0\n', 'utf8');
+
+  result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const repaired = fs.readFileSync(path.join(repoDir, '.githooks', 'post-commit'), 'utf8');
+  assert.match(repaired, /\[agent-auto-finish\] Auto-finish scheduled/);
+});
+
 test('doctor auto-refreshes managed pre-commit guard when template changed', () => {
   const repoDir = initRepo();
 
@@ -341,6 +517,28 @@ test('doctor auto-refreshes managed pre-commit guard when template changed', () 
 
   const repaired = fs.readFileSync(path.join(repoDir, '.githooks', 'pre-commit'), 'utf8');
   assert.match(repaired, /\[codex-branch-guard\] Codex agent commit blocked on non-agent branch/);
+});
+
+test('doctor --json reports docker.needsStart when docker markers exist but runtime is unavailable', () => {
+  const repoDir = initRepo();
+  fs.writeFileSync(path.join(repoDir, 'docker-compose.yml'), 'services: {}\n', 'utf8');
+
+  const fakeDocker = createFakeDockerScript(`
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv(['doctor', '--target', repoDir, '--json'], repoDir, {
+    MUSAFETY_DOCKER_BIN: fakeDocker,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.docker.required, true);
+  assert.equal(parsed.docker.status, 'inactive');
+  assert.equal(parsed.docker.needsStart, true);
+  assert.deepEqual(parsed.docker.reasons, ['docker-compose.yml']);
+  assert.match(parsed.docker.reason, /Cannot connect to the Docker daemon/);
 });
 
 test('agent-branch-start keeps main worktree branch unchanged by default', () => {
@@ -406,6 +604,128 @@ test('agent-branch-start blocks in-place mode unless explicitly allowed', () => 
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Created in-place branch: agent\/doctor\//);
+});
+
+test('setup infers multiagent.baseBranch from current non-agent top branch', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+
+  const result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const configuredBase = runCmd('git', ['config', '--get', 'multiagent.baseBranch'], repoDir);
+  assert.equal(configuredBase.status, 0, configuredBase.stderr);
+  assert.equal(configuredBase.stdout.trim(), 'main');
+
+  const start = runCmd('bash', ['scripts/agent-branch-start.sh', 'infer-base-branch', 'executor'], repoDir);
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  assert.match(start.stdout, /Created branch: agent\/executor\//);
+
+  const stillOnMain = runCmd('git', ['branch', '--show-current'], repoDir);
+  assert.equal(stillOnMain.status, 0, stillOnMain.stderr);
+  assert.equal(stillOnMain.stdout.trim(), 'main');
+});
+
+test('finish flow pushes, merges into detected base, and deletes agent branch locally/remotely', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir, 'main');
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply musafety setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['push', 'origin', 'main'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  const start = runCmd('bash', ['scripts/agent-branch-start.sh', 'finish-flow', 'executor'], repoDir);
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  const branchMatch = start.stdout.match(/Created branch: ([^\n]+)/);
+  const worktreeMatch = start.stdout.match(/Worktree: ([^\n]+)/);
+  assert.notEqual(branchMatch, null);
+  assert.notEqual(worktreeMatch, null);
+  const sourceBranch = branchMatch[1].trim();
+  const sourceWorktree = worktreeMatch[1].trim();
+
+  const topBranchAfterStart = runCmd('git', ['branch', '--show-current'], repoDir);
+  assert.equal(topBranchAfterStart.status, 0, topBranchAfterStart.stderr);
+  assert.equal(topBranchAfterStart.stdout.trim(), 'main');
+
+  result = runCmd('git', ['config', 'multiagent.autoFinishOnCommit', 'false'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  commitFile(sourceWorktree, 'agent-finish-main.txt', 'agent main flow\n', 'agent work');
+
+  const finish = runCmd('bash', ['scripts/agent-branch-finish.sh', '--branch', sourceBranch], repoDir);
+  assert.equal(finish.status, 0, finish.stderr || finish.stdout);
+  assert.match(finish.stdout, new RegExp(`Merged '${escapeRegexLiteral(sourceBranch)}' into 'main' and removed branch\\.`));
+
+  const currentTopBranch = runCmd('git', ['branch', '--show-current'], repoDir);
+  assert.equal(currentTopBranch.status, 0, currentTopBranch.stderr);
+  assert.equal(currentTopBranch.stdout.trim(), 'main');
+
+  const localSourceExists = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${sourceBranch}`], repoDir);
+  assert.notEqual(localSourceExists.status, 0, 'local source branch should be deleted');
+
+  const remoteSourceExists = runCmd('git', ['ls-remote', '--exit-code', '--heads', 'origin', sourceBranch], repoDir);
+  assert.notEqual(remoteSourceExists.status, 0, 'remote source branch should be deleted');
+
+  const mainFileCheck = runCmd('git', ['show', 'main:agent-finish-main.txt'], repoDir);
+  assert.equal(mainFileCheck.status, 0, mainFileCheck.stderr);
+  assert.match(mainFileCheck.stdout, /agent main flow/);
+
+  const originMainFileCheck = runCmd('git', ['show', 'origin/main:agent-finish-main.txt'], repoDir);
+  assert.equal(originMainFileCheck.status, 0, originMainFileCheck.stderr);
+  assert.match(originMainFileCheck.stdout, /agent main flow/);
+});
+
+test('musafety finish wraps finish script and completes merge lifecycle', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir, 'main');
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply musafety setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['push', 'origin', 'main'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  const start = runCmd('bash', ['scripts/agent-branch-start.sh', 'finish-cmd', 'critic'], repoDir);
+  assert.equal(start.status, 0, start.stderr || start.stdout);
+  const branchMatch = start.stdout.match(/Created branch: ([^\n]+)/);
+  const worktreeMatch = start.stdout.match(/Worktree: ([^\n]+)/);
+  assert.notEqual(branchMatch, null);
+  assert.notEqual(worktreeMatch, null);
+  const sourceBranch = branchMatch[1].trim();
+  const sourceWorktree = worktreeMatch[1].trim();
+
+  result = runCmd('git', ['config', 'multiagent.autoFinishOnCommit', 'false'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  commitFile(sourceWorktree, 'agent-finish-via-cli.txt', 'agent finish command\n', 'agent finish via CLI');
+
+  const finish = runNode(['finish', '--target', repoDir, '--branch', sourceBranch], repoDir);
+  assert.equal(finish.status, 0, finish.stderr || finish.stdout);
+  assert.match(finish.stdout, new RegExp(`Merged '${escapeRegexLiteral(sourceBranch)}' into 'main' and removed branch\\.`));
+
+  const localSourceExists = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${sourceBranch}`], repoDir);
+  assert.notEqual(localSourceExists.status, 0, 'local source branch should be deleted');
+
+  const remoteSourceExists = runCmd('git', ['ls-remote', '--exit-code', '--heads', 'origin', sourceBranch], repoDir);
+  assert.notEqual(remoteSourceExists.status, 0, 'remote source branch should be deleted');
+
+  const originMainFileCheck = runCmd('git', ['show', 'origin/main:agent-finish-via-cli.txt'], repoDir);
+  assert.equal(originMainFileCheck.status, 0, originMainFileCheck.stderr);
+  assert.match(originMainFileCheck.stdout, /agent finish command/);
 });
 
 test('protect command manages configured protected branches', () => {
@@ -788,43 +1108,12 @@ test('validate blocks unapproved deletions until allow-delete is set', () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
-test('fix repairs stale lock issues so scan becomes clean', () => {
+test('fix command is removed and points to doctor', () => {
   const repoDir = initRepo();
-
-  let result = runNode(['setup', '--target', repoDir], repoDir);
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-
-  // Simulate broken state
-  fs.rmSync(path.join(repoDir, 'scripts', 'agent-branch-start.sh'));
-  result = runCmd('git', ['config', 'core.hooksPath', '.git/hooks'], repoDir);
-  assert.equal(result.status, 0, result.stderr);
-
-  const lockPath = path.join(repoDir, '.omx', 'state', 'agent-file-locks.json');
-  fs.writeFileSync(
-    lockPath,
-    JSON.stringify(
-      {
-        locks: {
-          'missing/file.ts': {
-            branch: 'agent/non-existent',
-            claimed_at: '2026-01-01T00:00:00Z',
-            allow_delete: false,
-          },
-        },
-      },
-      null,
-      2,
-    ) + '\n',
-  );
-
-  result = runNode(['scan', '--target', repoDir], repoDir);
-  assert.equal(result.status, 2, 'missing file should yield error');
-
-  result = runNode(['fix', '--target', repoDir], repoDir);
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-
-  result = runNode(['scan', '--target', repoDir], repoDir);
-  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const result = runNode(['fix', '--target', repoDir], repoDir);
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stderr, /'fix' command was removed/);
+  assert.match(result.stderr, /musafety doctor/);
 });
 
 test('doctor repairs setup drift and confirms repo is musafe', () => {
@@ -901,27 +1190,20 @@ exit 1
   assert.match(remediation, /Verification loop/);
 });
 
-test('copy-prompt outputs AI setup instructions', () => {
+test('copy-prompt command is removed and points to help', () => {
   const repoDir = initRepo();
   const result = runNode(['copy-prompt'], repoDir);
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /npm i -g musafety/);
-  assert.match(result.stdout, /npm i -g oh-my-codex @fission-ai\/openspec/);
-  assert.match(result.stdout, /musafety setup/);
-  assert.match(result.stdout, /Codex or Claude/);
-  assert.match(result.stdout, /scripts\/agent-file-locks.py claim/);
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stderr, /'copy-prompt' command was removed/);
+  assert.match(result.stderr, /musafety help/);
 });
 
-test('copy-commands outputs command-only checklist', () => {
+test('copy-commands command is removed and points to help', () => {
   const repoDir = initRepo();
   const result = runNode(['copy-commands'], repoDir);
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /^npm i -g musafety/m);
-  assert.match(result.stdout, /musafety setup/);
-  assert.match(result.stdout, /musafety doctor/);
-  assert.match(result.stdout, /scripts\/agent-file-locks.py claim/);
-  assert.match(result.stdout, /musafety sync --check/);
-  assert.doesNotMatch(result.stdout, /Use this exact checklist/);
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(result.stderr, /'copy-commands' command was removed/);
+  assert.match(result.stderr, /musafety help/);
 });
 
 test('setup dry-run accepts explicit global install approval flags', () => {
@@ -1093,6 +1375,13 @@ exit 1
   assert.equal(typoB.status, 0, typoB.stderr || typoB.stdout);
   assert.match(typoB.stdout, /Interpreting 'realaese' as 'release'/);
   assert.equal(fs.readFileSync(marker, 'utf8').trim(), 'publish');
+});
+
+test('typo helper maps docktor to doctor', () => {
+  const repoDir = initRepo();
+  const result = runNode(['docktor', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Interpreting 'docktor' as 'doctor'/);
 });
 
 test('unknown command suggests nearest valid command', () => {

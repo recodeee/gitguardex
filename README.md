@@ -1,5 +1,7 @@
 # musafety (MULTI AGENTS SAFETY PROTCOL)
 
+## 🚀 Commit with confidence 🚀
+
 [![npm version](https://img.shields.io/npm/v/musafety?color=cb3837&logo=npm)](https://www.npmjs.com/package/musafety)
 [![CI](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml/badge.svg)](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/recodeecom/multiagent-safety/badge)](https://securityscorecards.dev/viewer/?uri=github.com/recodeecom/multiagent-safety)
@@ -54,11 +56,12 @@ musafety setup
 That one command runs:
 
 1. detects whether OMX/OpenSpec are already globally installed,
-2. asks strict Y/N approval only if something is missing,
+2. asks Y/N approval (default `Y`) only if something is missing,
 3. installs guardrail scripts/hooks,
 4. repairs common safety problems,
 5. installs local Codex + Claude musafety helper skill files if missing,
-6. scans and reports final status.
+6. auto-creates a sibling `main` worktree + VS Code workspace file for dual-branch SCM view (when setup/doctor/install runs from a non-`main` branch),
+7. scans and reports final status.
 
 ## Setup screenshot
 
@@ -74,6 +77,11 @@ That one command runs:
 
 - Codex skill: `.codex/skills/musafety/SKILL.md`
 - Claude command: `.claude/commands/musafety.md` (use as `/musafety`)
+
+When you run setup/doctor/install from a non-`main` branch, they also maintain a dual-view workspace so Source Control can show your active branch and `main` side-by-side:
+
+- main view worktree: `<repo>-main`
+- workspace file: `<repo>-branches.code-workspace`
 
 ## Scorecard report generation
 
@@ -105,27 +113,7 @@ By default this writes:
 
 ![musafety source control multi-agent screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-source-control.svg)
 
-## Copy prompt for your AI (Codex / Claude)
-
-```sh
-musafety copy-prompt
-```
-
-This prints a ready-to-paste prompt.
-
-### Prompt preview (SVG)
-
-![musafety copy prompt screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/copy-prompt-output.svg)
-
-### Commands-only copy mode
-
-If you only want executable commands (without explanatory text):
-
-```sh
-musafety copy-commands
-```
-
-Example output:
+## Quick setup checklist
 
 ```sh
 npm i -g musafety
@@ -140,80 +128,45 @@ musafety sync --check
 musafety sync
 ```
 
-Full checklist output:
-
-```text
-Use this exact checklist to setup multi-agent safety in this repository for Codex or Claude.
-
-1) Install (if missing):
-   npm i -g musafety
-
-2) Bootstrap safety in this repo:
-   musafety setup
-
-   - Setup detects global OMX/OpenSpec first.
-   - If one is missing and setup asks for approval, reply explicitly:
-     - y = run: npm i -g oh-my-codex @fission-ai/openspec (missing ones only)
-     - n = skip global installs
-
-3) If setup reports warnings/errors, repair + re-check:
-   musafety doctor
-
-4) Confirm next safe agent workflow commands:
-   bash scripts/agent-branch-start.sh "task" "agent-name"
-   python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
-   bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
-
-5) Optional: create OpenSpec planning workspace:
-   bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
-
-6) Optional: protect extra branches:
-   musafety protect add release staging
-
-7) Optional: sync your current agent branch with latest dev:
-   musafety sync --check
-   musafety sync
-```
-
 ## Basic commands
 
 ```sh
 musafety status [--target <path>] [--json]
-musafety setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install] [--no-gitignore]
-musafety doctor [--target <path>] [--dry-run] [--json] [--keep-stale-locks] [--no-gitignore]
-musafety copy-prompt
-musafety copy-commands
+musafety setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install] [--no-gitignore] [--no-main-view]
+musafety doctor [--target <path>] [--dry-run] [--json] [--keep-stale-locks] [--no-gitignore] [--no-main-view]
 musafety protect list [--target <path>]
 musafety protect add <branch...> [--target <path>]
 musafety protect remove <branch...> [--target <path>]
 musafety protect set <branch...> [--target <path>]
 musafety protect reset [--target <path>]
+musafety finish [--target <path>] [--base <branch>] [--branch <branch>] [--no-push] [--keep-remote-branch]
 musafety sync --check [--target <path>] [--base <branch>] [--json]
 musafety sync [--target <path>] [--base <branch>] [--strategy rebase|merge] [--ff-only]
 musafety report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD]
-bash scripts/agent-worktree-prune.sh --base dev   # manual stale worktree cleanup
+bash scripts/agent-worktree-prune.sh   # manual stale worktree cleanup
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
 
 No command defaults to `musafety status` (non-mutating health/status view).
 `musafety status` reports CLI/runtime info, global OMX/OpenSpec service status, and repo safety service state.
+If Docker markers are detected in the repo (`docker-compose.yml`, `compose.yml`, `Dockerfile*`),
+status/doctor also check Docker runtime and print a red warning when Docker needs to be started.
 When run in an interactive terminal, default `musafety` checks npm for a newer version first
 and asks `[Y/n]` whether to update immediately (default is `Y`).
 
 - Interactive setup: prompts for Y/N approval before global OMX/OpenSpec install.
-- Interactive prompt is strict (`[y/n]`) and waits for explicit answer.
+- Interactive prompt uses `[Y/n]` (default is `Y`) and waits for Enter.
 - Non-interactive setup: skips global installs by default; use `--yes-global-install` to force.
 
 ## Advanced commands
 
 ```sh
-musafety install [--target <path>] [--force] [--skip-agents] [--skip-package-json] [--no-gitignore] [--dry-run]
-musafety fix [--target <path>] [--dry-run] [--keep-stale-locks] [--no-gitignore]
+musafety install [--target <path>] [--force] [--skip-agents] [--skip-package-json] [--no-gitignore] [--no-main-view] [--dry-run]
 musafety scan [--target <path>] [--json]
 musafety report help
 ```
 
-## Keep agent branches synced with dev
+## Keep agent branches synced with your base branch
 
 Use sync checks before finishing agent branches:
 
@@ -224,7 +177,7 @@ musafety sync
 
 Defaults:
 
-- base branch: `dev` (or `multiagent.baseBranch`)
+- base branch: `multiagent.baseBranch` when configured, otherwise auto-detected from the repo (current non-agent branch, then `origin/HEAD`, then `dev/main/master`)
 - strategy: `rebase` (or `multiagent.sync.strategy`)
 
 Useful variants:
@@ -235,6 +188,14 @@ musafety sync --all-agent-branches --check
 ```
 
 By default, `agent-branch-finish.sh` also blocks finishing when your branch is behind `origin/<base>` and points to `musafety sync`.
+You can run the same flow via CLI with `musafety finish`.
+
+Finish flow defaults:
+
+1. push source `agent/*` branch to `origin`,
+2. merge it into the detected base branch,
+3. push base branch update,
+4. delete the source branch locally and on remote.
 
 Optional pre-commit behind-threshold gate (off by default):
 
@@ -275,17 +236,26 @@ Codex/OMX agent branch guard is enabled by default in pre-commit and can be conf
 multiagent.codexRequireAgentBranch
 ```
 
+Auto-finish on agent commit (isolated worktrees) is enabled by default and can be configured with:
+
+```text
+multiagent.autoFinishOnCommit
+```
+
 ## What is protected
 
 - direct commits to protected branches (defaults: `dev`, `main`, `master`; configurable via `musafety protect ...`)
 - protected-branch commits are blocked regardless of commit client (including VS Code Source Control)
 - Codex/OMX session commits are blocked on non-`agent/*` branches by default (keeps human branch untouched while agents use isolated branches)
+- agent commits on `agent/*` branches auto-finish by default (push -> merge to base -> delete agent branch local+remote)
 - overlapping file ownership between agents
 - unapproved deletions of claimed files
 - risky stale/missing lock state
 - accidental loss of critical guardrail files
 - setup also writes a managed `.gitignore` block so generated musafety scripts/hooks stay out of normal git status noise by default
   - pass `--no-gitignore` if you want to keep tracking these files in git
+- setup/doctor/install also auto-maintain `<repo>-main` + `<repo>-branches.code-workspace` for dual-repo Source Control view when run from a non-`main` branch
+  - pass `--no-main-view` to skip that automation
 
 ## Files it installs
 
@@ -297,6 +267,7 @@ scripts/agent-file-locks.py
 scripts/install-agent-git-hooks.sh
 scripts/openspec/init-plan-workspace.sh
 .githooks/pre-commit
+.githooks/post-commit
 .codex/skills/musafety/SKILL.md
 .claude/commands/musafety.md
 .omx/state/agent-file-locks.json
@@ -337,7 +308,7 @@ npm pack --dry-run
 
 - Setup now detects existing global OMX/OpenSpec installs first.
 - If tools are already present, setup skips global install automatically.
-- Interactive approval is now strict `[y/n]` (waits for explicit answer).
+- Interactive approval now uses `[Y/n]` (default is `Y`).
 - Added setup screenshot to README.
 - Added 3 additional workflow screenshots (branch start, lock/delete guard, source-control view).
 

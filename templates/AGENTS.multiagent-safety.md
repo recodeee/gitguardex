@@ -1,60 +1,82 @@
 <!-- multiagent-safety:START -->
-## Multi-Agent Execution Contract (multiagent-safety)
+<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->
+YOU ARE AN AUTONOMOUS CODING AGENT. EXECUTE TASKS TO COMPLETION WITHOUT ASKING FOR PERMISSION.
+DO NOT STOP TO ASK "SHOULD I PROCEED?" — PROCEED. DO NOT WAIT FOR CONFIRMATION ON OBVIOUS NEXT STEPS.
+IF BLOCKED, TRY AN ALTERNATIVE APPROACH. ONLY ASK WHEN TRULY AMBIGUOUS OR DESTRUCTIVE.
+USE CODEX NATIVE SUBAGENTS FOR INDEPENDENT PARALLEL SUBTASKS WHEN THAT IMPROVES THROUGHPUT. THIS IS COMPLEMENTARY TO OMX TEAM MODE.
+<!-- END AUTONOMY DIRECTIVE -->
 
-0. Session plan comment + read gate (required)
+# oh-my-codex - Intelligent Multi-Agent Orchestration
 
-- Before editing, each agent must post a short session comment/handoff note that includes:
-  - plan/change name (or checkpoint id),
-  - owned files/scope,
-  - intended action.
-- Before deleting/replacing code, each agent must read the latest session comments/handoffs first and confirm the target code is in their owned scope.
-- If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
-- For git isolation, each agent must start on a dedicated branch via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
-- Agent completion must use `scripts/agent-branch-finish.sh` (merge into `dev`, push, delete agent branch).
+This AGENTS.md is the top-level operating contract for this repository.
 
-1. Explicit ownership before edits
+## Operating principles
 
-- Assign each agent clear file/module ownership.
-- Do not edit files outside your assigned scope unless the leader reassigns ownership.
+- Solve the task directly when possible.
+- Delegate only when it materially improves quality, speed, or correctness.
+- Keep progress short, concrete, and useful.
+- Prefer evidence over assumption; verify before claiming completion.
+- Use the lightest path that preserves quality.
+- Check official docs before implementing with unfamiliar SDKs/APIs.
 
-2. Preserve parallel safety
+## Working agreements
 
-- Assume other agents are editing nearby code concurrently.
-- Never revert unrelated changes authored by others.
-- If another change conflicts with your approach, adapt and report the conflict in handoff.
+- For cleanup/refactor/deslop work: write a cleanup plan first.
+- Lock behavior with regression tests before cleanup edits when needed.
+- Prefer deletion over addition.
+- Reuse existing patterns before introducing new abstractions.
+- No new dependencies without explicit request.
+- Keep diffs small, reviewable, and reversible.
+- Branching policy (always enforce):
+  - Docs-only edits may be done directly on the active base branch (`multiagent.baseBranch`), for `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, and `docs/**`.
+  - Any code/runtime/test/release/config change must be done on a new branch and merged to the active base branch only through a PR (never direct push to base).
+  - For branch+merge flows, bump npm version and include updated `package.json` + lockfile in the merge.
+- Run lint/typecheck/tests/static analysis after changes.
+- Final reports must include: changed files, simplifications made, and remaining risks.
 
-3. Verify before completion
+## Delegation rules
 
-- Run required local checks for the area you changed.
-- Do not mark work complete without command output evidence.
+Default posture: work directly.
 
-4. Required handoff format (every agent)
+Mode guidance:
+- Use deep interview for unclear requirements.
+- Use ralplan for plan/tradeoff/test-shape consensus.
+- Use team only for multi-lane coordinated execution.
+- Use ralph only for persistent single-owner completion loops.
+- Otherwise execute directly in solo mode.
 
-- Files changed
-- Behavior touched
-- Verification commands + results
-- Risks / follow-ups
+## Verification
 
-## OpenSpec Plan Workspace (recommended)
+- Verify before claiming completion.
+- Run dependent tasks sequentially.
+- If verification fails, continue iterating instead of stopping early.
+- Before concluding, confirm: no pending work, tests pass, no known errors, and evidence collected.
 
-When work needs a durable planning phase, scaffold a plan workspace before implementation:
+## Lore commit protocol
 
-```bash
-bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
-```
+Commit messages should capture decision records using git trailers.
 
-Expected shape:
+Recommended trailers:
+- Constraint:
+- Rejected:
+- Confidence:
+- Scope-risk:
+- Reversibility:
+- Directive:
+- Tested:
+- Not-tested:
+- Related:
 
-```text
-openspec/plan/<plan-slug>/
-  summary.md
-  checkpoints.md
-  planner/plan.md
-  planner/tasks.md
-  architect/tasks.md
-  critic/tasks.md
-  executor/tasks.md
-  writer/tasks.md
-  verifier/tasks.md
-```
+## Cancellation
+
+Use cancel mode/workflow only when work is complete, user says stop, or a hard blocker prevents meaningful progress.
+
+## State management
+
+OMX runtime state typically lives under `.omx/`:
+- `.omx/state/`
+- `.omx/notepad.md`
+- `.omx/project-memory.json`
+- `.omx/plans/`
+- `.omx/logs/`
 <!-- multiagent-safety:END -->

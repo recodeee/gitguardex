@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${MUSAFETY_AUTO_FINISH_RUNNING:-0}" == "1" ]]; then
+  exit 0
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "$branch" || "$branch" != agent/* ]]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$repo_root" ]]; then
+  exit 0
+fi
+
+auto_finish_raw="${MUSAFETY_AUTO_FINISH_ON_COMMIT:-$(git config --get multiagent.autoFinishOnCommit || true)}"
+if [[ -z "$auto_finish_raw" ]]; then
+  auto_finish_raw="true"
+fi
+auto_finish="$(printf '%s' "$auto_finish_raw" | tr '[:upper:]' '[:lower:]')"
+case "$auto_finish" in
+  1|true|yes|on) ;;
+  0|false|no|off) exit 0 ;;
+  *) ;;
+esac
+
+finish_script="${repo_root}/scripts/agent-branch-finish.sh"
+if [[ ! -x "$finish_script" ]]; then
+  exit 0
+fi
+
+mkdir -p "${repo_root}/.omx/logs" >/dev/null 2>&1 || true
+log_file="${repo_root}/.omx/logs/auto-finish.log"
+
+echo "[agent-auto-finish] Auto-finish scheduled for '${branch}' (background)."
+nohup bash -c "sleep 0.2; MUSAFETY_AUTO_FINISH_RUNNING=1 bash \"$finish_script\" --branch \"$branch\" >>\"$log_file\" 2>&1" \
+  >/dev/null 2>&1 </dev/null &

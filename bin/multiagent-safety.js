@@ -14,6 +14,7 @@ const MAINTAINER_RELEASE_REPO = path.resolve(
   process.env.MUSAFETY_RELEASE_REPO || '/tmp/multiagent-safety',
 );
 const NPM_BIN = process.env.MUSAFETY_NPM_BIN || 'npm';
+const DOCKER_BIN = process.env.MUSAFETY_DOCKER_BIN || 'docker';
 const SCORECARD_BIN = process.env.MUSAFETY_SCORECARD_BIN || 'scorecard';
 const GIT_PROTECTED_BRANCHES_KEY = 'multiagent.protectedBranches';
 const GIT_BASE_BRANCH_KEY = 'multiagent.baseBranch';
@@ -21,6 +22,9 @@ const GIT_SYNC_STRATEGY_KEY = 'multiagent.sync.strategy';
 const DEFAULT_PROTECTED_BRANCHES = ['dev', 'main', 'master'];
 const DEFAULT_BASE_BRANCH = 'dev';
 const DEFAULT_SYNC_STRATEGY = 'rebase';
+const MAIN_VIEW_BRANCH = process.env.MUSAFETY_MAIN_VIEW_BRANCH || 'main';
+const MAIN_VIEW_WORKTREE_SUFFIX = process.env.MUSAFETY_MAIN_VIEW_WORKTREE_SUFFIX || '-main';
+const MAIN_VIEW_WORKSPACE_SUFFIX = process.env.MUSAFETY_MAIN_VIEW_WORKSPACE_SUFFIX || '-branches.code-workspace';
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '..', 'templates');
 
@@ -32,6 +36,7 @@ const TEMPLATE_FILES = [
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   'githooks/pre-commit',
+  'githooks/post-commit',
   'codex/skills/musafety/SKILL.md',
   'claude/commands/musafety.md',
 ];
@@ -39,6 +44,7 @@ const TEMPLATE_FILES = [
 const AUTO_SYNC_TEMPLATE_FILES = new Set([
   'scripts/agent-branch-start.sh',
   'githooks/pre-commit',
+  'githooks/post-commit',
 ]);
 
 const EXECUTABLE_RELATIVE_PATHS = new Set([
@@ -49,6 +55,7 @@ const EXECUTABLE_RELATIVE_PATHS = new Set([
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   '.githooks/pre-commit',
+  '.githooks/post-commit',
 ]);
 
 const CRITICAL_GUARDRAIL_PATHS = new Set([
@@ -61,6 +68,7 @@ const CRITICAL_GUARDRAIL_PATHS = new Set([
 
 const LOCK_FILE_RELATIVE = '.omx/state/agent-file-locks.json';
 const AGENTS_MARKER_START = '<!-- multiagent-safety:START -->';
+const AGENTS_MARKER_END = '<!-- multiagent-safety:END -->';
 const GITIGNORE_MARKER_START = '# multiagent-safety:START';
 const GITIGNORE_MARKER_END = '# multiagent-safety:END';
 const MANAGED_GITIGNORE_PATHS = [
@@ -71,6 +79,7 @@ const MANAGED_GITIGNORE_PATHS = [
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   '.githooks/pre-commit',
+  '.githooks/post-commit',
   '.codex/skills/musafety/SKILL.md',
   '.claude/commands/musafety.md',
   LOCK_FILE_RELATIVE,
@@ -83,6 +92,7 @@ const COMMAND_TYPO_ALIASES = new Map([
   ['intsall', 'install'],
   ['docter', 'doctor'],
   ['doctro', 'doctor'],
+  ['docktor', 'doctor'],
   ['scna', 'scan'],
 ]);
 const SUGGESTIBLE_COMMANDS = [
@@ -90,13 +100,11 @@ const SUGGESTIBLE_COMMANDS = [
   'setup',
   'doctor',
   'report',
-  'copy-prompt',
-  'copy-commands',
   'protect',
+  'finish',
   'sync',
   'release',
   'install',
-  'fix',
   'scan',
   'print-agents-snippet',
   'help',
@@ -104,65 +112,19 @@ const SUGGESTIBLE_COMMANDS = [
 ];
 const CLI_COMMAND_DESCRIPTIONS = [
   ['status', 'Show musafety CLI + service health without modifying files'],
-  ['setup', 'Install + repair guardrails in a git repo (supports --no-gitignore)'],
-  ['doctor', 'Repair safety setup drift, then verify repo safety'],
+  ['setup', 'Install + repair guardrails in a git repo (supports --no-gitignore, --no-main-view)'],
+  ['doctor', 'Repair safety setup drift, then verify repo safety (supports --no-main-view)'],
   ['report', 'Generate security/safety reports (for example: OpenSSF scorecard)'],
-  ['copy-prompt', 'Print the AI-ready setup checklist'],
-  ['copy-commands', 'Print setup checklist as executable commands only'],
   ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
+  ['finish', 'Run safe branch finish flow (push, merge to base, cleanup agent branch)'],
   ['sync', 'Check or sync agent branches with origin/<base>'],
-  ['install', 'Install templates/locks/hooks without running full setup (supports --no-gitignore)'],
-  ['fix', 'Repair broken or missing guardrail files/config (supports --no-gitignore)'],
+  ['install', 'Install templates/locks/hooks without running full setup (supports --no-gitignore, --no-main-view)'],
   ['scan', 'Report safety issues and exit non-zero on findings'],
   ['print-agents-snippet', 'Print the AGENTS.md snippet template'],
   ['release', 'Publish musafety from maintainer release repo'],
   ['help', 'Show this help output'],
   ['version', 'Print musafety version'],
 ];
-
-const AI_SETUP_PROMPT = `Use this exact checklist to setup multi-agent safety in this repository for Codex or Claude.
-
-1) Install (if missing):
-   npm i -g musafety
-
-2) Bootstrap safety in this repo:
-   musafety setup
-
-   - Setup detects global OMX/OpenSpec first.
-   - If one is missing and setup asks for approval, reply explicitly:
-     - y = run: npm i -g oh-my-codex @fission-ai/openspec (missing ones only)
-     - n = skip global installs
-
-3) If setup reports warnings/errors, repair + re-check:
-   musafety doctor
-
-4) Confirm next safe agent workflow commands:
-   bash scripts/agent-branch-start.sh "task" "agent-name"
-   python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
-   bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
-
-5) Optional: create OpenSpec planning workspace:
-   bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
-
-6) Optional: protect extra branches:
-   musafety protect add release staging
-
-7) Optional: sync your current agent branch with latest dev:
-   musafety sync --check
-   musafety sync
-`;
-
-const AI_SETUP_COMMANDS = `npm i -g musafety
-musafety setup
-musafety doctor
-bash scripts/agent-branch-start.sh "task" "agent-name"
-python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
-bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
-bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
-musafety protect add release staging
-musafety sync --check
-musafety sync
-`;
 
 const SCORECARD_RISK_BY_CHECK = {
   'Dangerous-Workflow': 'Critical',
@@ -181,6 +143,13 @@ const SCORECARD_RISK_BY_CHECK = {
   Contributors: 'Low',
   License: 'Low',
 };
+
+const DOCKER_SIGNAL_FILENAMES = [
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'compose.yml',
+  'compose.yaml',
+];
 
 function runtimeVersion() {
   return `${packageJson.name}/${packageJson.version} ${process.platform}-${process.arch} node-${process.version}`;
@@ -207,14 +176,119 @@ function statusDot(status) {
   return colorize('●', '33'); // yellow for degraded/unknown
 }
 
+function firstNonEmptyLine(value) {
+  return String(value || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean) || '';
+}
+
+function detectRepoDockerSignals(repoRoot) {
+  const reasons = [];
+
+  for (const filename of DOCKER_SIGNAL_FILENAMES) {
+    if (fs.existsSync(path.join(repoRoot, filename))) {
+      reasons.push(filename);
+    }
+  }
+
+  let rootEntries = [];
+  try {
+    rootEntries = fs.readdirSync(repoRoot, { withFileTypes: true });
+  } catch {
+    rootEntries = [];
+  }
+
+  for (const entry of rootEntries) {
+    if (!entry.isFile()) continue;
+    if (/^dockerfile(?:\..+)?$/i.test(entry.name)) {
+      reasons.push(entry.name);
+    }
+  }
+
+  return uniquePreserveOrder(reasons);
+}
+
+function inspectDockerRuntime() {
+  const result = run(DOCKER_BIN, ['info'], { timeout: 5000 });
+
+  if (result.error) {
+    if (result.error.code === 'ENOENT') {
+      return {
+        status: 'inactive',
+        reason: `Docker CLI not found (${DOCKER_BIN})`,
+      };
+    }
+    return {
+      status: 'unknown',
+      reason: result.error.message || `Unable to run ${DOCKER_BIN} info`,
+    };
+  }
+
+  if (result.status === 0) {
+    return {
+      status: 'active',
+      reason: '',
+    };
+  }
+
+  const details = firstNonEmptyLine(result.stderr || result.stdout);
+  return {
+    status: 'inactive',
+    reason: details || 'Docker daemon is not available',
+  };
+}
+
+function detectRepoDockerStatus(repoRoot) {
+  const reasons = detectRepoDockerSignals(repoRoot);
+  if (reasons.length === 0) {
+    return {
+      required: false,
+      status: 'not-required',
+      needsStart: false,
+      reasons,
+      reason: '',
+    };
+  }
+
+  const runtime = inspectDockerRuntime();
+  return {
+    required: true,
+    status: runtime.status,
+    needsStart: runtime.status === 'inactive',
+    reasons,
+    reason: runtime.reason || '',
+  };
+}
+
 function commandCatalogLines(indent = '  ') {
   const maxCommandLength = CLI_COMMAND_DESCRIPTIONS.reduce(
     (max, [command]) => Math.max(max, command.length),
     0,
   );
-  return CLI_COMMAND_DESCRIPTIONS.map(
-    ([command, description]) => `${indent}${command.padEnd(maxCommandLength + 2)}${description}`,
-  );
+  const lines = [];
+
+  for (const [command, description] of CLI_COMMAND_DESCRIPTIONS) {
+    const supportMatch = String(description).match(/^(.*)\(supports\s+([^)]+)\)\s*$/i);
+    const mainDescription = supportMatch ? supportMatch[1].trimEnd() : description;
+    lines.push(`${indent}${command.padEnd(maxCommandLength + 2)}${mainDescription}`);
+
+    if (!supportMatch) {
+      continue;
+    }
+
+    const flags = supportMatch[2]
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    lines.push(`${indent}${' '.repeat(maxCommandLength + 2)}supports:`);
+    for (const flag of flags) {
+      lines.push(`${indent}${' '.repeat(maxCommandLength + 4)}${flag}`);
+    }
+  }
+
+  return lines;
 }
 
 function printToolLogsSummary() {
@@ -251,6 +325,21 @@ function printToolLogsSummary() {
     console.log(`  ${pipe}${line.slice(2)}`);
   }
   console.log(`  ${corner}─ ${colorize(`Try '${TOOL_NAME} doctor' for one-step repair + verification.`, '2')}`);
+}
+
+function printDurExBrandingBanner() {
+  if (!supportsAnsiColors()) {
+    console.log('=========================================');
+    console.log('         COMMIT WITH CONFIDENCE          ');
+    console.log('=========================================');
+    return;
+  }
+
+  const border = colorize('█'.repeat(41), '1;35');
+  const title = colorize('█    COMMIT WITH CONFIDENCE     █', '1;95');
+  console.log(border);
+  console.log(title);
+  console.log(border);
 }
 
 function usage(options = {}) {
@@ -295,6 +384,192 @@ function gitRun(repoRoot, args, { allowFailure = false } = {}) {
     throw new Error(`git ${args.join(' ')} failed: ${(result.stderr || '').trim()}`);
   }
   return result;
+}
+
+function hasVerifiedHead(repoRoot) {
+  return gitRun(repoRoot, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true }).status === 0;
+}
+
+function parseWorktreeListPorcelain(rawOutput) {
+  const entries = [];
+  let current = null;
+  const lines = String(rawOutput || '').split('\n');
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      if (current) {
+        entries.push(current);
+        current = null;
+      }
+      continue;
+    }
+
+    if (line.startsWith('worktree ')) {
+      if (current) {
+        entries.push(current);
+      }
+      current = {
+        path: line.slice('worktree '.length).trim(),
+        branchRef: '',
+      };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (line.startsWith('branch ')) {
+      current.branchRef = line.slice('branch '.length).trim();
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+function computeMainViewPaths(repoRoot) {
+  const parentDir = path.dirname(repoRoot);
+  const baseName = path.basename(repoRoot);
+  const worktreePath = path.join(parentDir, `${baseName}${MAIN_VIEW_WORKTREE_SUFFIX}`);
+  const workspacePath = path.join(parentDir, `${baseName}${MAIN_VIEW_WORKSPACE_SUFFIX}`);
+  return { worktreePath, workspacePath };
+}
+
+function ensureMainBranchWorkspace(repoRoot, dryRun) {
+  const operations = [];
+  const { worktreePath, workspacePath } = computeMainViewPaths(repoRoot);
+  const mainBranchRef = `refs/heads/${MAIN_VIEW_BRANCH}`;
+  const currentBranchResult = gitRun(repoRoot, ['branch', '--show-current'], { allowFailure: true });
+  const currentBranch = (currentBranchResult.stdout || '').trim() || 'current';
+
+  if (!hasVerifiedHead(repoRoot)) {
+    operations.push({
+      status: 'skipped',
+      file: path.relative(repoRoot, workspacePath),
+      note: 'main branch view skipped (repository has no commits yet)',
+    });
+    return operations;
+  }
+
+  if (!gitRefExists(repoRoot, mainBranchRef)) {
+    operations.push({
+      status: 'skipped',
+      file: path.relative(repoRoot, workspacePath),
+      note: `main branch view skipped ('${MAIN_VIEW_BRANCH}' branch not found)`,
+    });
+    return operations;
+  }
+
+  const worktreeList = gitRun(repoRoot, ['worktree', 'list', '--porcelain'], { allowFailure: true });
+  if (worktreeList.status !== 0) {
+    operations.push({
+      status: 'skipped',
+      file: path.relative(repoRoot, workspacePath),
+      note: 'main branch view skipped (unable to read git worktree list)',
+    });
+    return operations;
+  }
+
+  const entries = parseWorktreeListPorcelain(worktreeList.stdout);
+  const normalizedRepoRoot = path.resolve(repoRoot);
+  const existingMainEntry = entries.find((entry) => {
+    if (entry.branchRef !== mainBranchRef) return false;
+    return path.resolve(entry.path) !== normalizedRepoRoot;
+  });
+
+  let selectedMainWorktreePath = existingMainEntry ? path.resolve(existingMainEntry.path) : '';
+  if (!selectedMainWorktreePath) {
+    if (currentBranch === MAIN_VIEW_BRANCH) {
+      operations.push({
+        status: 'skipped',
+        file: path.relative(repoRoot, workspacePath),
+        note: 'main branch view skipped (current branch is main; generate from agent branch)',
+      });
+      return operations;
+    }
+
+    if (!dryRun) {
+      if (fs.existsSync(worktreePath)) {
+        operations.push({
+          status: 'skipped',
+          file: path.relative(repoRoot, worktreePath),
+          note: `main branch view skipped (${worktreePath} already exists and is not a registered worktree)`,
+        });
+        return operations;
+      }
+
+      const addResult = gitRun(
+        repoRoot,
+        ['worktree', 'add', worktreePath, MAIN_VIEW_BRANCH],
+        { allowFailure: true },
+      );
+      if (addResult.status !== 0) {
+        operations.push({
+          status: 'skipped',
+          file: path.relative(repoRoot, worktreePath),
+          note: `main branch view skipped (${(addResult.stderr || '').trim() || 'unable to create worktree'})`,
+        });
+        return operations;
+      }
+      selectedMainWorktreePath = path.resolve(worktreePath);
+      operations.push({
+        status: 'created',
+        file: path.relative(repoRoot, worktreePath),
+        note: `main branch worktree (${MAIN_VIEW_BRANCH})`,
+      });
+    } else {
+      selectedMainWorktreePath = path.resolve(worktreePath);
+      operations.push({
+        status: 'would-create',
+        file: path.relative(repoRoot, worktreePath),
+        note: `main branch worktree (${MAIN_VIEW_BRANCH})`,
+      });
+    }
+  } else {
+    operations.push({
+      status: 'unchanged',
+      file: path.relative(repoRoot, selectedMainWorktreePath),
+      note: `main branch worktree (${MAIN_VIEW_BRANCH})`,
+    });
+  }
+
+  const workspaceContent = `${JSON.stringify({
+    folders: [
+      { name: currentBranch, path: repoRoot },
+      { name: MAIN_VIEW_BRANCH, path: selectedMainWorktreePath },
+    ],
+    settings: {
+      'scm.alwaysShowRepositories': true,
+    },
+  }, null, 2)}\n`;
+
+  const existingWorkspace = fs.existsSync(workspacePath) ? fs.readFileSync(workspacePath, 'utf8') : '';
+  if (existingWorkspace === workspaceContent) {
+    operations.push({
+      status: 'unchanged',
+      file: path.relative(repoRoot, workspacePath),
+      note: 'workspace shows current + main repositories in SCM',
+    });
+    return operations;
+  }
+
+  const workspaceExisted = fs.existsSync(workspacePath);
+
+  if (!dryRun) {
+    fs.writeFileSync(workspacePath, workspaceContent, 'utf8');
+  }
+
+  operations.push({
+    status: workspaceExisted ? (dryRun ? 'would-update' : 'updated') : (dryRun ? 'would-create' : 'created'),
+    file: path.relative(repoRoot, workspacePath),
+    note: 'workspace shows current + main repositories in SCM',
+  });
+
+  return operations;
 }
 
 function resolveRepoRoot(targetPath) {
@@ -477,7 +752,7 @@ function ensurePackageScripts(repoRoot, dryRun) {
   const wantedScripts = {
     'agent:branch:start': 'bash ./scripts/agent-branch-start.sh',
     'agent:branch:finish': 'bash ./scripts/agent-branch-finish.sh',
-    'agent:cleanup': 'bash ./scripts/agent-worktree-prune.sh --base dev',
+    'agent:cleanup': 'bash ./scripts/agent-worktree-prune.sh',
     'agent:hooks:install': 'bash ./scripts/install-agent-git-hooks.sh',
     'agent:locks:claim': 'python3 ./scripts/agent-file-locks.py claim',
     'agent:locks:allow-delete': 'python3 ./scripts/agent-file-locks.py allow-delete',
@@ -489,7 +764,6 @@ function ensurePackageScripts(repoRoot, dryRun) {
     'agent:branch:sync:check': `${TOOL_NAME} sync --check`,
     'agent:safety:setup': `${TOOL_NAME} setup`,
     'agent:safety:scan': `${TOOL_NAME} scan`,
-    'agent:safety:fix': `${TOOL_NAME} fix`,
     'agent:safety:doctor': `${TOOL_NAME} doctor`,
   };
 
@@ -516,6 +790,9 @@ function ensurePackageScripts(repoRoot, dryRun) {
 function ensureAgentsSnippet(repoRoot, dryRun) {
   const agentsPath = path.join(repoRoot, 'AGENTS.md');
   const snippet = fs.readFileSync(path.join(TEMPLATE_ROOT, 'AGENTS.multiagent-safety.md'), 'utf8').trimEnd();
+  const escapedStart = AGENTS_MARKER_START.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedEnd = AGENTS_MARKER_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const managedRegex = new RegExp(`${escapedStart}[\\s\\S]*?${escapedEnd}`, 'm');
 
   if (!fs.existsSync(agentsPath)) {
     if (!dryRun) {
@@ -526,7 +803,24 @@ function ensureAgentsSnippet(repoRoot, dryRun) {
 
   const existing = fs.readFileSync(agentsPath, 'utf8');
   if (existing.includes(AGENTS_MARKER_START)) {
-    return { status: 'unchanged', file: 'AGENTS.md' };
+    if (managedRegex.test(existing)) {
+      const next = existing.replace(managedRegex, snippet);
+      if (next === existing) {
+        return { status: 'unchanged', file: 'AGENTS.md' };
+      }
+      if (!dryRun) {
+        fs.writeFileSync(agentsPath, next, 'utf8');
+      }
+      return { status: 'updated', file: 'AGENTS.md', note: 'refreshed musafety managed block' };
+    }
+
+    const startIndex = existing.indexOf(AGENTS_MARKER_START);
+    const prefix = existing.slice(0, startIndex).replace(/\s*$/, '');
+    const next = `${prefix}${prefix.length > 0 ? '\n\n' : ''}${snippet}\n`;
+    if (!dryRun) {
+      fs.writeFileSync(agentsPath, next, 'utf8');
+    }
+    return { status: 'updated', file: 'AGENTS.md', note: 'repaired malformed musafety marker block' };
   }
 
   const separator = existing.endsWith('\n') ? '\n' : '\n\n';
@@ -632,6 +926,10 @@ function parseCommonArgs(rawArgs, defaults) {
     }
     if (arg === '--no-gitignore') {
       options.skipGitignore = true;
+      continue;
+    }
+    if (arg === '--no-main-view') {
+      options.skipMainView = true;
       continue;
     }
 
@@ -911,12 +1209,89 @@ function readGitConfig(repoRoot, key) {
   return (result.stdout || '').trim();
 }
 
+function branchExistsLocalOrRemote(repoRoot, branchName) {
+  if (!branchName) return false;
+  const local = gitRun(repoRoot, ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], {
+    allowFailure: true,
+  });
+  if (local.status === 0) {
+    return true;
+  }
+  const remote = gitRun(repoRoot, ['show-ref', '--verify', '--quiet', `refs/remotes/origin/${branchName}`], {
+    allowFailure: true,
+  });
+  return remote.status === 0;
+}
+
+function inferDefaultBaseBranch(repoRoot) {
+  const currentBranchResult = gitRun(repoRoot, ['branch', '--show-current'], { allowFailure: true });
+  const currentBranch = currentBranchResult.status === 0 ? (currentBranchResult.stdout || '').trim() : '';
+  if (currentBranch && !currentBranch.startsWith('agent/') && branchExistsLocalOrRemote(repoRoot, currentBranch)) {
+    return { branch: currentBranch, source: 'current-branch' };
+  }
+
+  const remoteHead = gitRun(repoRoot, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'], {
+    allowFailure: true,
+  });
+  if (remoteHead.status === 0) {
+    const remoteDefault = (remoteHead.stdout || '').trim().replace(/^origin\//, '');
+    if (remoteDefault && branchExistsLocalOrRemote(repoRoot, remoteDefault)) {
+      return { branch: remoteDefault, source: 'origin-head' };
+    }
+  }
+
+  for (const candidate of [DEFAULT_BASE_BRANCH, 'main', 'master']) {
+    if (branchExistsLocalOrRemote(repoRoot, candidate)) {
+      return { branch: candidate, source: 'fallback-known-branch' };
+    }
+  }
+
+  if (currentBranch && !currentBranch.startsWith('agent/')) {
+    return { branch: currentBranch, source: 'current-branch-fallback' };
+  }
+
+  return { branch: DEFAULT_BASE_BRANCH, source: 'default' };
+}
+
 function resolveBaseBranch(repoRoot, explicitBase) {
   if (explicitBase) {
     return explicitBase;
   }
   const configured = readGitConfig(repoRoot, GIT_BASE_BRANCH_KEY);
-  return configured || DEFAULT_BASE_BRANCH;
+  if (configured && branchExistsLocalOrRemote(repoRoot, configured)) {
+    return configured;
+  }
+  return inferDefaultBaseBranch(repoRoot).branch;
+}
+
+function ensureBaseBranchConfig(repoRoot, dryRun) {
+  const configured = readGitConfig(repoRoot, GIT_BASE_BRANCH_KEY);
+  if (configured && branchExistsLocalOrRemote(repoRoot, configured)) {
+    return {
+      status: 'unchanged',
+      file: `git-config:${GIT_BASE_BRANCH_KEY}`,
+      note: `base branch '${configured}'`,
+    };
+  }
+
+  const inferred = inferDefaultBaseBranch(repoRoot);
+  if (!inferred.branch) {
+    return {
+      status: 'skipped',
+      file: `git-config:${GIT_BASE_BRANCH_KEY}`,
+      note: 'unable to infer base branch',
+    };
+  }
+
+  if (!dryRun) {
+    gitRun(repoRoot, ['config', GIT_BASE_BRANCH_KEY, inferred.branch]);
+  }
+
+  return {
+    status: dryRun ? 'would-set' : 'set',
+    file: `git-config:${GIT_BASE_BRANCH_KEY}`,
+    note: `base branch '${inferred.branch}' (${inferred.source})`,
+  };
 }
 
 function resolveSyncStrategy(repoRoot, explicitStrategy) {
@@ -1080,6 +1455,62 @@ function parseSyncArgs(rawArgs) {
   return options;
 }
 
+function parseFinishArgs(rawArgs) {
+  const options = {
+    target: process.cwd(),
+    base: '',
+    branch: '',
+    noPush: false,
+    keepRemoteBranch: false,
+  };
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === '--target') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--target requires a path value');
+      }
+      options.target = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--base') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--base requires a branch value');
+      }
+      options.base = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--branch') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--branch requires a branch value');
+      }
+      options.branch = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--no-push') {
+      options.noPush = true;
+      continue;
+    }
+    if (arg === '--keep-remote-branch') {
+      options.keepRemoteBranch = true;
+      continue;
+    }
+    throw new Error(`Unknown option: ${arg}`);
+  }
+
+  if (!options.target) {
+    throw new Error('--target requires a path value');
+  }
+
+  return options;
+}
+
 function syncOperation(repoRoot, strategy, baseRef, ffOnly) {
   if (strategy === 'rebase') {
     if (ffOnly) {
@@ -1143,36 +1574,26 @@ function readSingleLineFromStdin() {
 
 function promptYesNo(question, defaultYes = true) {
   const hint = defaultYes ? '[Y/n]' : '[y/N]';
-  while (true) {
-    process.stdout.write(`${question} ${hint} `);
-    const answer = readSingleLineFromStdin().trim().toLowerCase();
+  process.stdout.write(`${question} ${hint} `);
+  const answer = readSingleLineFromStdin().trim().toLowerCase();
 
-    if (!answer) {
-      return defaultYes;
-    }
-    if (answer === 'y' || answer === 'yes') {
-      return true;
-    }
-    if (answer === 'n' || answer === 'no') {
-      return false;
-    }
-    process.stdout.write('Please answer with y or n.\n');
+  if (!answer) {
+    return defaultYes;
   }
+  if (answer === 'y' || answer === 'yes') {
+    return true;
+  }
+  if (answer === 'n' || answer === 'no') {
+    return false;
+  }
+  process.stdout.write(`\n[${TOOL_NAME}] Invalid input '${answer}', using default ${defaultYes ? 'yes' : 'no'}.\n`);
+  return defaultYes;
 }
 
 function envFlagEnabled(name) {
   const raw = process.env[name];
   if (raw == null) return false;
   return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
-}
-
-function parseAutoApproval(name) {
-  const raw = process.env[name];
-  if (raw == null) return null;
-  const normalized = String(raw).trim().toLowerCase();
-  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
-  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
-  return null;
 }
 
 function parseVersionString(version) {
@@ -1259,21 +1680,17 @@ function maybeSelfUpdateBeforeStatus() {
   }
 
   printUpdateAvailableBanner(check.current, check.latest);
-
-  const autoApproval = parseAutoApproval('MUSAFETY_AUTO_UPDATE_APPROVAL');
   const interactive = isInteractiveTerminal();
 
-  if (!interactive && autoApproval == null) {
+  if (!interactive) {
     console.log(`[${TOOL_NAME}] Non-interactive shell; skipping auto-update prompt.`);
     return;
   }
 
-  const shouldUpdate = autoApproval != null
-    ? autoApproval
-    : promptYesNo(
-      `Update now? (${NPM_BIN} i -g ${packageJson.name}@latest)`,
-      true,
-    );
+  const shouldUpdate = promptYesNo(
+    `Update now? (${NPM_BIN} i -g ${packageJson.name}@latest)`,
+    false,
+  );
 
   if (!shouldUpdate) {
     console.log(`[${TOOL_NAME}] Skipped update.`);
@@ -1287,24 +1704,6 @@ function maybeSelfUpdateBeforeStatus() {
   }
 
   console.log(`[${TOOL_NAME}] ✅ Updated to latest published version.`);
-}
-
-function promptYesNoStrict(question) {
-  while (true) {
-    process.stdout.write(`${question} [y/n] `);
-    const answer = readSingleLineFromStdin().trim().toLowerCase();
-
-    if (answer === 'y' || answer === 'yes') {
-      process.stdout.write('\n');
-      return true;
-    }
-    if (answer === 'n' || answer === 'no') {
-      process.stdout.write('\n');
-      return false;
-    }
-
-    process.stdout.write('Please answer with y or n.\n');
-  }
 }
 
 function resolveGlobalInstallApproval(options) {
@@ -1371,8 +1770,9 @@ function askGlobalInstallForMissing(options, missingPackages) {
   }
 
   if (approval.source === 'prompt') {
-    const approved = promptYesNoStrict(
+    const approved = promptYesNo(
       `Install missing global tools now? (npm i -g ${missingPackages.join(' ')})`,
+      true,
     );
     return { approved, source: 'prompt' };
   }
@@ -1455,6 +1855,7 @@ function runInstallInternal(options) {
   }
 
   operations.push(ensureLockRegistry(repoRoot, Boolean(options.dryRun)));
+  operations.push(ensureBaseBranchConfig(repoRoot, Boolean(options.dryRun)));
   if (!options.skipGitignore) {
     operations.push(ensureManagedGitignore(repoRoot, Boolean(options.dryRun)));
   }
@@ -1465,6 +1866,10 @@ function runInstallInternal(options) {
 
   if (!options.skipAgents) {
     operations.push(ensureAgentsSnippet(repoRoot, Boolean(options.dryRun)));
+  }
+
+  if (!options.skipMainView) {
+    operations.push(...ensureMainBranchWorkspace(repoRoot, Boolean(options.dryRun)));
   }
 
   const hookResult = configureHooks(repoRoot, Boolean(options.dryRun));
@@ -1481,6 +1886,7 @@ function runFixInternal(options) {
   }
 
   operations.push(ensureLockRegistry(repoRoot, Boolean(options.dryRun)));
+  operations.push(ensureBaseBranchConfig(repoRoot, Boolean(options.dryRun)));
   if (!options.skipGitignore) {
     operations.push(ensureManagedGitignore(repoRoot, Boolean(options.dryRun)));
   }
@@ -1517,6 +1923,10 @@ function runFixInternal(options) {
 
   if (!options.skipAgents) {
     operations.push(ensureAgentsSnippet(repoRoot, Boolean(options.dryRun)));
+  }
+
+  if (!options.skipMainView) {
+    operations.push(...ensureMainBranchWorkspace(repoRoot, Boolean(options.dryRun)));
   }
 
   const hookResult = configureHooks(repoRoot, Boolean(options.dryRun));
@@ -1706,6 +2116,7 @@ function status(rawArgs) {
   const targetPath = path.resolve(options.target);
   const inGitRepo = isGitRepo(targetPath);
   const scanResult = inGitRepo ? runScanInternal({ target: targetPath, json: false }) : null;
+  const dockerStatus = scanResult ? detectRepoDockerStatus(scanResult.repoRoot) : null;
   const repoServiceStatus = scanResult
     ? (scanResult.errors === 0 && scanResult.warnings === 0 ? 'active' : 'degraded')
     : 'inactive';
@@ -1730,6 +2141,15 @@ function status(rawArgs) {
           findings: scanResult.findings.length,
         }
         : null,
+      docker: dockerStatus
+        ? {
+          required: dockerStatus.required,
+          status: dockerStatus.status,
+          needsStart: dockerStatus.needsStart,
+          reasons: dockerStatus.reasons,
+          reason: dockerStatus.reason || null,
+        }
+        : null,
     },
     detectionError: toolchain.ok ? null : toolchain.error,
   };
@@ -1740,6 +2160,7 @@ function status(rawArgs) {
     return;
   }
 
+  printDurExBrandingBanner();
   console.log(`[${TOOL_NAME}] CLI: ${payload.cli.runtime}`);
   if (!toolchain.ok) {
     console.log(`[${TOOL_NAME}] ⚠️ Could not detect global services: ${toolchain.error}`);
@@ -1768,6 +2189,24 @@ function status(rawArgs) {
   }
   console.log(`[${TOOL_NAME}] Repo: ${scanResult.repoRoot}`);
   console.log(`[${TOOL_NAME}] Branch: ${scanResult.branch}`);
+  if (dockerStatus && dockerStatus.required) {
+    if (dockerStatus.status === 'active') {
+      console.log(`[${TOOL_NAME}] Docker runtime: ${statusDot('active')} active.`);
+    } else if (dockerStatus.status === 'inactive') {
+      const inactiveText = colorize('inactive', '31');
+      const needsStart = colorize('needs start', '31;1');
+      console.log(
+        `[${TOOL_NAME}] Docker runtime: ${statusDot('inactive')} ${inactiveText} (${needsStart}; repo requires Docker).`,
+      );
+    } else {
+      console.log(
+        `[${TOOL_NAME}] Docker runtime: ${statusDot('degraded')} unknown (repo requires Docker).`,
+      );
+    }
+    if (dockerStatus.reason) {
+      console.log(`[${TOOL_NAME}] Docker check: ${dockerStatus.reason}`);
+    }
+  }
   printToolLogsSummary();
 
   process.exitCode = 0;
@@ -1780,6 +2219,7 @@ function install(rawArgs) {
     skipAgents: false,
     skipPackageJson: false,
     skipGitignore: false,
+    skipMainView: false,
     dryRun: false,
   });
 
@@ -1788,26 +2228,6 @@ function install(rawArgs) {
 
   if (!options.dryRun) {
     console.log(`[${TOOL_NAME}] Installed. Next step: ${TOOL_NAME} setup`);
-  }
-
-  process.exitCode = 0;
-}
-
-function fix(rawArgs) {
-  const options = parseCommonArgs(rawArgs, {
-    target: process.cwd(),
-    dropStaleLocks: true,
-    skipAgents: false,
-    skipPackageJson: false,
-    skipGitignore: false,
-    dryRun: false,
-  });
-
-  const payload = runFixInternal(options);
-  printOperations('Fix target', payload, options.dryRun);
-
-  if (!options.dryRun) {
-    console.log(`[${TOOL_NAME}] Repair complete. Next step: ${TOOL_NAME} scan`);
   }
 
   process.exitCode = 0;
@@ -1831,12 +2251,14 @@ function doctor(rawArgs) {
     skipAgents: false,
     skipPackageJson: false,
     skipGitignore: false,
+    skipMainView: false,
     dryRun: false,
     json: false,
   });
 
   const fixPayload = runFixInternal(options);
   const scanResult = runScanInternal({ target: options.target, json: false });
+  const dockerStatus = detectRepoDockerStatus(scanResult.repoRoot);
   const musafe = scanResult.errors === 0 && scanResult.warnings === 0;
 
   if (options.json) {
@@ -1856,6 +2278,13 @@ function doctor(rawArgs) {
             warnings: scanResult.warnings,
             findings: scanResult.findings,
           },
+          docker: {
+            required: dockerStatus.required,
+            status: dockerStatus.status,
+            needsStart: dockerStatus.needsStart,
+            reasons: dockerStatus.reasons,
+            reason: dockerStatus.reason || null,
+          },
         },
         null,
         2,
@@ -1873,6 +2302,14 @@ function doctor(rawArgs) {
     console.log(
       `[${TOOL_NAME}] ⚠️ Repo is not fully musafe yet (${scanResult.errors} error(s), ${scanResult.warnings} warning(s)).`,
     );
+  }
+  if (dockerStatus.required && dockerStatus.status === 'inactive') {
+    console.log(
+      `[${TOOL_NAME}] ${colorize('Docker runtime is required by this repo and is currently inactive.', '31')}`,
+    );
+    if (dockerStatus.reason) {
+      console.log(`[${TOOL_NAME}] Docker check: ${dockerStatus.reason}`);
+    }
   }
   setExitCodeFromScan(scanResult);
 }
@@ -1975,6 +2412,7 @@ function setup(rawArgs) {
     skipAgents: false,
     skipPackageJson: false,
     skipGitignore: false,
+    skipMainView: false,
     dryRun: false,
     yesGlobalInstall: false,
     noGlobalInstall: false,
@@ -2010,6 +2448,7 @@ function setup(rawArgs) {
     skipAgents: options.skipAgents,
     skipPackageJson: options.skipPackageJson,
     skipGitignore: options.skipGitignore,
+    skipMainView: options.skipMainView,
   });
   printOperations('Setup/fix', fixPayload, options.dryRun);
 
@@ -2024,7 +2463,6 @@ function setup(rawArgs) {
 
   if (scanResult.errors === 0 && scanResult.warnings === 0) {
     console.log(`[${TOOL_NAME}] ✅ Setup complete.`);
-    console.log(`[${TOOL_NAME}] Copy AI setup prompt with: ${TOOL_NAME} copy-prompt`);
   }
 
   setExitCodeFromScan(scanResult);
@@ -2082,16 +2520,6 @@ function release(rawArgs) {
 function printAgentsSnippet() {
   const snippetPath = path.join(TEMPLATE_ROOT, 'AGENTS.multiagent-safety.md');
   process.stdout.write(fs.readFileSync(snippetPath, 'utf8'));
-}
-
-function copyPrompt() {
-  process.stdout.write(AI_SETUP_PROMPT);
-  process.exitCode = 0;
-}
-
-function copyCommands() {
-  process.stdout.write(AI_SETUP_COMMANDS);
-  process.exitCode = 0;
 }
 
 function sync(rawArgs) {
@@ -2248,6 +2676,46 @@ function sync(rawArgs) {
     console.log(`[${TOOL_NAME}] Strategy: ${strategy}`);
     console.log(`[${TOOL_NAME}] Behind before sync: ${before.behind}`);
     console.log(`[${TOOL_NAME}] Result: success (behind now: ${after.behind})`);
+  }
+
+  process.exitCode = 0;
+}
+
+function finish(rawArgs) {
+  const options = parseFinishArgs(rawArgs);
+  const repoRoot = resolveRepoRoot(options.target);
+  const scriptPath = path.join(repoRoot, 'scripts', 'agent-branch-finish.sh');
+
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error(
+      `Missing finish script: ${scriptPath}\nRun '${TOOL_NAME} setup --target ${repoRoot}' first.`,
+    );
+  }
+
+  const args = [scriptPath];
+  if (options.base) {
+    args.push('--base', options.base);
+  }
+  if (options.branch) {
+    args.push('--branch', options.branch);
+  }
+  if (options.noPush) {
+    args.push('--no-push');
+  }
+  if (options.keepRemoteBranch) {
+    args.push('--keep-remote-branch');
+  }
+
+  const result = run('bash', args, { cwd: repoRoot });
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`finish failed (exit ${result.status}).`);
   }
 
   process.exitCode = 0;
@@ -2422,18 +2890,13 @@ function main() {
     return;
   }
 
-  if (command === 'copy-prompt') {
-    copyPrompt();
-    return;
-  }
-
-  if (command === 'copy-commands') {
-    copyCommands();
-    return;
-  }
-
   if (command === 'protect') {
     protect(rest);
+    return;
+  }
+
+  if (command === 'finish') {
+    finish(rest);
     return;
   }
 
@@ -2452,9 +2915,12 @@ function main() {
     return;
   }
 
+  if (command === 'copy-prompt' || command === 'copy-commands') {
+    throw new Error(`'${command}' command was removed. Use '${TOOL_NAME} help' for the current command list.`);
+  }
+
   if (command === 'fix') {
-    fix(rest);
-    return;
+    throw new Error(`'fix' command was removed. Use '${TOOL_NAME} doctor' instead.`);
   }
 
   if (command === 'scan') {
