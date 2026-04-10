@@ -27,7 +27,8 @@ This AGENTS.md is the top-level operating contract for this repository.
 - No new dependencies without explicit request.
 - Keep diffs small, reviewable, and reversible.
 - Branching policy (always enforce):
-  - Docs-only edits may be done directly on the active `main` branch (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, and `docs/**`).
+  - Docs-only edits may be done locally on the active `main` branch (`README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, and `docs/**`).
+  - If remote `main` is protected, publish docs-only `main` commits by moving/cherry-picking them to a docs branch and opening a PR.
   - Any code/runtime/test/release/config change must be done on a new branch and merged to `main` only through a PR (never direct push to `main`).
   - For branch+merge flows, bump npm version and include updated `package.json` + lockfile in the merge.
 - Run lint/typecheck/tests/static analysis after changes.
