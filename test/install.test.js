@@ -141,6 +141,10 @@ function aheadBehindCounts(repoDir, branchRef, baseRef) {
   };
 }
 
+function escapeRegexLiteral(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 test('setup provisions workflow files and repo config', () => {
   const repoDir = initRepo();
 
@@ -257,7 +261,7 @@ exit 1
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /UPDATE AVAILABLE/);
-  assert.match(result.stdout, new RegExp(`Current:\\s+${cliVersion.replace(/\./g, '\\.')}`));
+  assert.match(result.stdout, new RegExp(`Current:\\s+${escapeRegexLiteral(cliVersion)}`));
   assert.match(result.stdout, /Latest\s+:\s+9\.9\.9/);
   assert.match(result.stdout, /Updated to latest published version/);
   assert.equal(fs.existsSync(markerPath), true, 'expected self-update command to run');
