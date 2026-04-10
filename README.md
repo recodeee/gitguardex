@@ -1,4 +1,4 @@
-# musafety
+# musafety (MULTI AGENTS SAFETY PROTCOL)
 
 [![npm version](https://img.shields.io/npm/v/musafety?color=cb3837&logo=npm)](https://www.npmjs.com/package/musafety)
 [![CI](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml/badge.svg)](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml)
@@ -40,6 +40,7 @@ Package page: https://www.npmjs.com/package/musafety
 - Dedicated security disclosure policy in [`SECURITY.md`](./SECURITY.md)
 
 Related tools:
+
 - [oh-my-codex (OMX)](https://github.com/Yeachan-Heo/oh-my-codex)
 - [OpenSpec](https://github.com/Fission-AI/OpenSpec)
 
@@ -74,6 +75,19 @@ That one command runs:
 - Codex skill: `.codex/skills/musafety/SKILL.md`
 - Claude command: `.claude/commands/musafety.md` (use as `/musafety`)
 
+## Scorecard report generation
+
+Create/update markdown reports from OpenSSF Scorecard JSON:
+
+```sh
+musafety report scorecard --repo github.com/recodeecom/multiagent-safety
+```
+
+By default this writes:
+
+- `docs/reports/openssf-scorecard-baseline-YYYY-MM-DD.md`
+- `docs/reports/openssf-scorecard-remediation-plan-YYYY-MM-DD.md`
+
 ## Workflow protocol screenshots
 
 ### 1) Start isolated agent branch/worktree
@@ -94,7 +108,36 @@ That one command runs:
 musafety copy-prompt
 ```
 
-This prints a ready-to-paste prompt. Example output:
+This prints a ready-to-paste prompt.
+
+### Prompt preview (SVG)
+
+![musafety copy prompt screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/copy-prompt-output.svg)
+
+### Commands-only copy mode
+
+If you only want executable commands (without explanatory text):
+
+```sh
+musafety copy-commands
+```
+
+Example output:
+
+```sh
+npm i -g musafety
+musafety setup
+musafety doctor
+bash scripts/agent-branch-start.sh "task" "agent-name"
+python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
+bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
+bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
+musafety protect add release staging
+musafety sync --check
+musafety sync
+```
+
+Full checklist output:
 
 ```text
 Use this exact checklist to setup multi-agent safety in this repository for Codex or Claude.
@@ -136,6 +179,7 @@ musafety status [--target <path>] [--json]
 musafety setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install] [--no-gitignore]
 musafety doctor [--target <path>] [--dry-run] [--json] [--keep-stale-locks] [--no-gitignore]
 musafety copy-prompt
+musafety copy-commands
 musafety protect list [--target <path>]
 musafety protect add <branch...> [--target <path>]
 musafety protect remove <branch...> [--target <path>]
@@ -143,6 +187,7 @@ musafety protect set <branch...> [--target <path>]
 musafety protect reset [--target <path>]
 musafety sync --check [--target <path>] [--base <branch>] [--json]
 musafety sync [--target <path>] [--base <branch>] [--strategy rebase|merge] [--ff-only]
+musafety report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD]
 bash scripts/agent-worktree-prune.sh --base dev   # manual stale worktree cleanup
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
@@ -162,6 +207,7 @@ and asks `[Y/n]` whether to update immediately (default is `Y`).
 musafety install [--target <path>] [--force] [--skip-agents] [--skip-package-json] [--no-gitignore] [--dry-run]
 musafety fix [--target <path>] [--dry-run] [--keep-stale-locks] [--no-gitignore]
 musafety scan [--target <path>] [--json]
+musafety report help
 ```
 
 ## Keep agent branches synced with dev
@@ -174,6 +220,7 @@ musafety sync
 ```
 
 Defaults:
+
 - base branch: `dev` (or `multiagent.baseBranch`)
 - strategy: `rebase` (or `multiagent.sync.strategy`)
 

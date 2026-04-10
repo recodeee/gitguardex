@@ -763,6 +763,18 @@ test('copy-prompt outputs AI setup instructions', () => {
   assert.match(result.stdout, /scripts\/agent-file-locks.py claim/);
 });
 
+test('copy-commands outputs command-only checklist', () => {
+  const repoDir = initRepo();
+  const result = runNode(['copy-commands'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^npm i -g musafety/m);
+  assert.match(result.stdout, /musafety setup/);
+  assert.match(result.stdout, /musafety doctor/);
+  assert.match(result.stdout, /scripts\/agent-file-locks.py claim/);
+  assert.match(result.stdout, /musafety sync --check/);
+  assert.doesNotMatch(result.stdout, /Use this exact checklist/);
+});
+
 test('setup dry-run accepts explicit global install approval flags', () => {
   const repoDir = initRepo();
 
