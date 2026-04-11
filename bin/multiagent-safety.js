@@ -10,7 +10,11 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 const TOOL_NAME = 'guardex';
 const SHORT_TOOL_NAME = 'gx';
 const LEGACY_NAMES = ['musafety', 'multiagent-safety'];
-const GLOBAL_TOOLCHAIN_PACKAGES = ['oh-my-codex', '@fission-ai/openspec'];
+const GLOBAL_TOOLCHAIN_PACKAGES = [
+  'oh-my-codex',
+  '@fission-ai/openspec',
+  '@imdeadpool/codex-account-switcher',
+];
 const MAINTAINER_RELEASE_REPO = path.resolve(
   process.env.MUSAFETY_RELEASE_REPO || '/tmp/multiagent-safety',
 );
@@ -132,9 +136,9 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup GuardeX (Guardian T-R
    gx setup
    # alias: gx init
 
-   - Setup detects global OMX/OpenSpec first.
+   - Setup detects global OMX/OpenSpec/codex-auth first.
    - If one is missing and setup asks for approval, reply explicitly:
-     - y = run: npm i -g oh-my-codex @fission-ai/openspec (missing ones only)
+     - y = run: npm i -g oh-my-codex @fission-ai/openspec @imdeadpool/codex-account-switcher (missing ones only)
      - n = skip global installs
 
 3) If setup reports warnings/errors, repair + re-check:
@@ -1993,7 +1997,7 @@ function setup(rawArgs) {
       `[${TOOL_NAME}] ✅ Global tools installed (${(globalInstallStatus.packages || []).join(', ')}).`,
     );
   } else if (globalInstallStatus.status === 'already-installed') {
-    console.log(`[${TOOL_NAME}] ✅ OMX/OpenSpec global tools already installed. Skipping.`);
+    console.log(`[${TOOL_NAME}] ✅ OMX/OpenSpec/codex-auth global tools already installed. Skipping.`);
   } else if (globalInstallStatus.status === 'failed') {
     console.log(
       `[${TOOL_NAME}] ⚠️ Global install failed: ${globalInstallStatus.reason}\n` +

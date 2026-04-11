@@ -50,6 +50,7 @@ Related tools:
 
 - [oh-my-codex (OMX)](https://github.com/Yeachan-Heo/oh-my-codex)
 - [OpenSpec](https://github.com/Fission-AI/OpenSpec)
+- [codex-account-switcher-cli](https://github.com/recodeecom/codex-account-switcher-cli)
 
 ## Fast setup (recommended)
 
@@ -62,7 +63,7 @@ gx init
 
 That one command runs:
 
-1. detects whether OMX/OpenSpec are already globally installed,
+1. detects whether OMX/OpenSpec/codex-auth are already globally installed,
 2. asks strict Y/N approval only if something is missing,
 3. installs guardrail scripts/hooks,
 4. repairs common safety problems,
@@ -221,9 +222,9 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
    gx setup
    # alias: gx init
 
-   - Setup detects global OMX/OpenSpec first.
+   - Setup detects global OMX/OpenSpec/codex-auth first.
    - If one is missing and setup asks for approval, reply explicitly:
-     - y = run: npm i -g oh-my-codex @fission-ai/openspec (missing ones only)
+     - y = run: npm i -g oh-my-codex @fission-ai/openspec @imdeadpool/codex-account-switcher (missing ones only)
      - n = skip global installs
 
 3) If setup reports warnings/errors, repair + re-check:
@@ -274,12 +275,12 @@ bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec p
 ```
 
 No command defaults to `gx status` (non-mutating health/status view).
-`gx status` reports CLI/runtime info, global OMX/OpenSpec service status, and repo safety service state.
+`gx status` reports CLI/runtime info, global OMX/OpenSpec/codex-auth service status, and repo safety service state.
 `gx init` is an alias of `gx setup`.
 When run in an interactive terminal, default `GuardeX` checks npm for a newer version first
 and asks `[y/N]` whether to update immediately (default is `N`).
 
-- Interactive setup: prompts for Y/N approval before global OMX/OpenSpec install.
+- Interactive setup: prompts for Y/N approval before global OMX/OpenSpec/codex-auth install.
 - Interactive prompt is strict (`[y/n]`) and waits for explicit answer.
 - Non-interactive setup: skips global installs by default; use `--yes-global-install` to force.
 
