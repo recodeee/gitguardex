@@ -196,6 +196,17 @@ merge_status="direct"
 direct_push_error=""
 pr_url=""
 
+is_local_branch_delete_error() {
+  local output="$1"
+  if [[ "$output" != *"failed to delete local branch"* ]]; then
+    return 1
+  fi
+  if [[ "$output" == *"cannot delete branch"* ]] || [[ "$output" == *"used by worktree"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
 run_pr_flow() {
   if ! command -v "$GH_BIN" >/dev/null 2>&1; then
     echo "[agent-branch-finish] PR fallback requested but GitHub CLI not found: ${GH_BIN}" >&2
@@ -220,6 +231,10 @@ run_pr_flow() {
 
   merge_output=""
   if merge_output="$("$GH_BIN" pr merge "$SOURCE_BRANCH" --squash --delete-branch 2>&1)"; then
+    return 0
+  fi
+  if is_local_branch_delete_error "$merge_output"; then
+    echo "[agent-branch-finish] PR merged but gh could not delete the local branch (active worktree); continuing local cleanup." >&2
     return 0
   fi
 
