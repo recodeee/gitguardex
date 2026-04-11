@@ -216,7 +216,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(packageJson.scripts['agent:branch:sync'], 'gx sync');
   assert.equal(packageJson.scripts['agent:branch:sync:check'], 'gx sync --check');
   assert.equal(packageJson.scripts['agent:safety:setup'], 'gx setup');
-  assert.equal(packageJson.scripts['agent:cleanup'], 'bash ./scripts/agent-worktree-prune.sh --base dev');
+  assert.equal(packageJson.scripts['agent:cleanup'], 'bash ./scripts/agent-worktree-prune.sh');
 
   const agentsContent = fs.readFileSync(path.join(repoDir, 'AGENTS.md'), 'utf8');
   assert.equal(agentsContent.includes('<!-- multiagent-safety:START -->'), true);
@@ -681,12 +681,18 @@ test('pre-commit blocks protected branch commits even from VS Code Source Contro
   assert.match(hookResult.stderr, /Direct commits on protected branches are blocked/);
 });
 
-test('codex-agent launches codex inside a fresh sandbox worktree', () => {
+test('codex-agent launches codex inside a fresh sandbox worktree and auto-prunes clean branches on exit', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
 
   const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
   assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+  let result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 
   const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-fake-codex-'));
   const fakeCodexPath = path.join(fakeBin, 'codex');
@@ -713,6 +719,8 @@ test('codex-agent launches codex inside a fresh sandbox worktree', () => {
   );
   assert.equal(launch.status, 0, launch.stderr || launch.stdout);
   assert.match(launch.stdout, /\[codex-agent\] Launching codex in sandbox:/);
+  assert.match(launch.stdout, /\[codex-agent\] Session ended \(exit=0\)\. Running worktree cleanup\.\.\./);
+  assert.match(launch.stdout, /\[codex-agent\] Auto-cleaned sandbox worktree:/);
 
   const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
   assert.match(
@@ -723,9 +731,10 @@ test('codex-agent launches codex inside a fresh sandbox worktree', () => {
   const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
 
-  const branchResult = runCmd('git', ['-C', launchedCwd, 'branch', '--show-current'], repoDir);
-  assert.equal(branchResult.status, 0, branchResult.stderr || branchResult.stdout);
-  assert.match(branchResult.stdout.trim(), /^agent\/planner\//);
+  assert.equal(fs.existsSync(launchedCwd), false, 'clean codex-agent sandbox should auto-prune on exit');
+  const launchedBranch = extractCreatedBranch(launch.stdout);
+  const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${launchedBranch}`], repoDir);
+  assert.notEqual(branchResult.status, 0, 'clean auto-pruned branch should be removed locally');
 });
 
 test('codex-agent supports --codex-bin override before positional arguments', () => {
@@ -734,6 +743,12 @@ test('codex-agent supports --codex-bin override before positional arguments', ()
 
   const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
   assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+  let result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 
   const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-fake-codex-bin-'));
   const fakeCodexPath = path.join(fakeBin, 'my-codex');
@@ -768,6 +783,7 @@ test('codex-agent supports --codex-bin override before positional arguments', ()
   );
   assert.equal(launch.status, 0, launch.stderr || launch.stdout);
   assert.match(launch.stdout, /\[codex-agent\] Launching .* in sandbox:/);
+  assert.match(launch.stdout, /\[codex-agent\] Auto-cleaned sandbox worktree:/);
 
   const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
   assert.match(
@@ -776,6 +792,47 @@ test('codex-agent supports --codex-bin override before positional arguments', ()
   );
   const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
+  assert.equal(fs.existsSync(launchedCwd), false, 'override invocation should still auto-prune clean sandbox');
+});
+
+test('codex-agent keeps dirty sandbox worktrees after session exit', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+
+  const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-fake-codex-dirty-'));
+  const fakeCodexPath = path.join(fakeBin, 'codex');
+  fs.writeFileSync(
+    fakeCodexPath,
+    `#!/usr/bin/env bash\n` +
+      `pwd > "${'${MUSAFETY_TEST_CODEX_CWD}'}"\n` +
+      `echo "$@" > "${'${MUSAFETY_TEST_CODEX_ARGS}'}"\n` +
+      `echo "dirty" > codex-dirty.txt\n`,
+    'utf8',
+  );
+  fs.chmodSync(fakeCodexPath, 0o755);
+
+  const cwdMarker = path.join(repoDir, '.codex-agent-cwd-dirty');
+  const argsMarker = path.join(repoDir, '.codex-agent-args-dirty');
+  const launch = runCmd(
+    'bash',
+    ['scripts/codex-agent.sh', 'dirty-task', 'planner', 'dev', '--model', 'gpt-5.4-mini'],
+    repoDir,
+    {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      MUSAFETY_TEST_CODEX_CWD: cwdMarker,
+      MUSAFETY_TEST_CODEX_ARGS: argsMarker,
+    },
+  );
+  assert.equal(launch.status, 0, launch.stderr || launch.stdout);
+  assert.match(launch.stdout, /\[agent-worktree-prune\] Skipping dirty worktree/);
+  assert.match(launch.stdout, /\[codex-agent\] Sandbox worktree kept:/);
+
+  const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
+  assert.equal(fs.existsSync(launchedCwd), true, 'dirty sandbox should be preserved');
+  assert.equal(fs.existsSync(path.join(launchedCwd, 'codex-dirty.txt')), true);
 });
 
 test('sync command rebases current agent branch onto latest origin/dev', () => {
@@ -1335,12 +1392,34 @@ test('worktree prune removes merged agent worktrees and branches', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.existsSync(worktreePath), true);
 
-  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--base', 'dev'], repoDir);
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(fs.existsSync(worktreePath), false);
 
   const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-prune'], repoDir);
   assert.notEqual(branchResult.status, 0, 'merged agent branch should be removed by prune');
+});
+
+test('worktree prune preserves dirty agent worktrees unless --force-dirty is used', () => {
+  const repoDir = initRepo();
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  const worktreePath = path.join(repoDir, '.omx', 'agent-worktrees', 'agent__test-dirty-prune');
+  result = runCmd('git', ['worktree', 'add', '-b', 'agent/test-dirty-prune', worktreePath, 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  fs.writeFileSync(path.join(worktreePath, 'dirty.txt'), 'dirty\n', 'utf8');
+
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /skipped_dirty=1/);
+  assert.equal(fs.existsSync(worktreePath), true, 'dirty worktree should remain without --force-dirty');
+
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--force-dirty'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(worktreePath), false, 'dirty worktree should be removable with --force-dirty');
 });
 
 test('release fails outside the maintainer repo path', () => {

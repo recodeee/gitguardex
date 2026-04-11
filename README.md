@@ -270,7 +270,8 @@ gx protect reset [--target <path>]
 gx sync --check [--target <path>] [--base <branch>] [--json]
 gx sync [--target <path>] [--base <branch>] [--strategy rebase|merge] [--ff-only]
 gx report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD]
-bash scripts/agent-worktree-prune.sh --base dev   # manual stale worktree cleanup
+bash scripts/agent-worktree-prune.sh   # manual stale worktree cleanup (auto base detection)
+bash scripts/agent-worktree-prune.sh --force-dirty   # remove stale dirty worktrees too
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
 
@@ -284,6 +285,7 @@ and asks `[y/N]` whether to update immediately (default is `N`).
 - Interactive prompt is strict (`[y/n]`) and waits for explicit answer.
 - Non-interactive setup: skips global installs by default; use `--yes-global-install` to force.
 - In already-initialized repos, `setup` / `install` / `fix` / `doctor` block writes on protected `main` by default; start an agent branch first. Use `--allow-protected-base-write` only for emergency in-place maintenance.
+- `scripts/codex-agent.sh` now auto-runs worktree prune after a Codex session; clean sandbox branches are removed automatically, dirty ones are kept.
 
 ## Advanced commands
 
