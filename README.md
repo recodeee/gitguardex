@@ -129,12 +129,14 @@ agent_bot_<timestamp>-<snapshot>-<task>
 That gives you one stable main repo view plus parallel agent worktrees in the
 same VS Code window, so branch ownership and progress stay visible at once.
 
-## Companion tool: `codex-auth` account switcher
+## GuardeX dependency: `codex-auth` account switcher
 
 If you run multiple Codex identities, this workflow pairs well with
-[`codex-auth`](https://github.com/recodeecom/codex-account-switcher-cli/tree/main),
+[`codex-auth`](https://github.com/recodeecom/codex-account-switcher-cli),
 a CLI that snapshots `~/.codex/auth.json` per account and lets you switch fast
 without repeated login/logout loops.
+
+For multi-identity workflows, treat `codex-auth` as a GuardeX dependency.
 
 > [!WARNING]
 > Not affiliated with OpenAI or Codex. Not an official tool.
@@ -270,9 +272,12 @@ gx protect reset [--target <path>]
 gx sync --check [--target <path>] [--base <branch>] [--json]
 gx sync [--target <path>] [--base <branch>] [--strategy rebase|merge] [--ff-only]
 gx report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD]
-bash scripts/agent-worktree-prune.sh --base dev   # manual stale worktree cleanup
+bash scripts/agent-worktree-prune.sh   # manual stale worktree cleanup (auto-detects base)
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
+
+`scripts/codex-agent.sh` auto-runs worktree cleanup after each Codex session exit.
+If a branch still appears in VS Code, it is usually still dirty/unmerged (kept intentionally).
 
 No command defaults to `gx status` (non-mutating health/status view).
 `gx status` reports CLI/runtime info, global OMX/OpenSpec/codex-auth service status, and repo safety service state.

@@ -65,7 +65,13 @@ if ! command -v "$CODEX_BIN" >/dev/null 2>&1; then
   exit 127
 fi
 
-if [[ ! -x "scripts/agent-branch-start.sh" ]]; then
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "[codex-agent] Not inside a git repository." >&2
+  exit 1
+fi
+repo_root="$(git rev-parse --show-toplevel)"
+
+if [[ ! -x "${repo_root}/scripts/agent-branch-start.sh" ]]; then
   echo "[codex-agent] Missing scripts/agent-branch-start.sh. Run: gx setup" >&2
   exit 1
 fi
@@ -75,7 +81,7 @@ if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 ]]; then
   start_args+=("$BASE_BRANCH")
 fi
 
-start_output="$(bash scripts/agent-branch-start.sh "${start_args[@]}")"
+start_output="$(bash "${repo_root}/scripts/agent-branch-start.sh" "${start_args[@]}")"
 printf '%s\n' "$start_output"
 
 worktree_path="$(printf '%s\n' "$start_output" | sed -n 's/^\[agent-branch-start\] Worktree: //p' | tail -n1)"
@@ -91,4 +97,32 @@ fi
 
 echo "[codex-agent] Launching ${CODEX_BIN} in sandbox: $worktree_path"
 cd "$worktree_path"
-exec "$CODEX_BIN" "$@"
+set +e
+"$CODEX_BIN" "$@"
+codex_exit="$?"
+set -e
+
+cd "$repo_root"
+
+if [[ -x "${repo_root}/scripts/agent-worktree-prune.sh" ]]; then
+  echo "[codex-agent] Session ended (exit=${codex_exit}). Running worktree cleanup..."
+  prune_args=()
+  if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 ]]; then
+    prune_args+=(--base "$BASE_BRANCH")
+  fi
+  if ! bash "${repo_root}/scripts/agent-worktree-prune.sh" "${prune_args[@]}"; then
+    echo "[codex-agent] Warning: automatic worktree cleanup failed." >&2
+  fi
+fi
+
+if [[ ! -d "$worktree_path" ]]; then
+  echo "[codex-agent] Auto-cleaned sandbox worktree: $worktree_path"
+else
+  worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  echo "[codex-agent] Sandbox worktree kept: $worktree_path"
+  if [[ -n "$worktree_branch" && "$worktree_branch" != "HEAD" ]]; then
+    echo "[codex-agent] If finished, merge + clean with: bash scripts/agent-branch-finish.sh --branch \"${worktree_branch}\""
+  fi
+fi
+
+exit "$codex_exit"

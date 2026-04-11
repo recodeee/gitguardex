@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_BRANCH="dev"
+BASE_BRANCH="${MUSAFETY_BASE_BRANCH:-}"
+BASE_BRANCH_EXPLICIT=0
 DRY_RUN=0
+FORCE_DIRTY=0
+
+if [[ -n "$BASE_BRANCH" ]]; then
+  BASE_BRANCH_EXPLICIT=1
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base)
-      BASE_BRANCH="${2:-dev}"
+      BASE_BRANCH="${2:-}"
+      BASE_BRANCH_EXPLICIT=1
       shift 2
       ;;
     --dry-run)
       DRY_RUN=1
       shift
       ;;
+    --force-dirty)
+      FORCE_DIRTY=1
+      shift
+      ;;
     *)
       echo "[agent-worktree-prune] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--dry-run]" >&2
+      echo "Usage: $0 [--base <branch>] [--dry-run] [--force-dirty]" >&2
       exit 1
       ;;
   esac
@@ -30,6 +41,46 @@ fi
 repo_root="$(git rev-parse --show-toplevel)"
 current_pwd="$(pwd -P)"
 worktree_root="${repo_root}/.omx/agent-worktrees"
+
+resolve_base_branch() {
+  local configured=""
+  local current=""
+
+  configured="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -n "$configured" ]] && git -C "$repo_root" show-ref --verify --quiet "refs/heads/${configured}"; then
+    printf '%s' "$configured"
+    return 0
+  fi
+
+  current="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -n "$current" && "$current" != "HEAD" ]] && git -C "$repo_root" show-ref --verify --quiet "refs/heads/${current}"; then
+    printf '%s' "$current"
+    return 0
+  fi
+
+  for fallback in main dev; do
+    if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${fallback}"; then
+      printf '%s' "$fallback"
+      return 0
+    fi
+  done
+
+  printf '%s' ""
+}
+
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -z "$BASE_BRANCH" ]]; then
+  echo "[agent-worktree-prune] --base requires a non-empty branch name." >&2
+  exit 1
+fi
+
+if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
+  BASE_BRANCH="$(resolve_base_branch)"
+fi
+
+if [[ -z "$BASE_BRANCH" ]]; then
+  echo "[agent-worktree-prune] Unable to infer base branch. Pass --base <branch>." >&2
+  exit 1
+fi
 
 if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
   echo "[agent-worktree-prune] Base branch not found: ${BASE_BRANCH}" >&2
@@ -49,9 +100,17 @@ branch_has_worktree() {
   git -C "$repo_root" worktree list --porcelain | grep -q "^branch refs/heads/${branch}$"
 }
 
+is_clean_worktree() {
+  local wt="$1"
+  git -C "$wt" diff --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
+    && git -C "$wt" diff --cached --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
+    && [[ -z "$(git -C "$wt" ls-files --others --exclude-standard)" ]]
+}
+
 removed_worktrees=0
 removed_branches=0
 skipped_active=0
+skipped_dirty=0
 
 process_entry() {
   local wt="$1"
@@ -86,6 +145,12 @@ process_entry() {
   fi
 
   if [[ -z "$remove_reason" ]]; then
+    return
+  fi
+
+  if [[ "$FORCE_DIRTY" -ne 1 ]] && ! is_clean_worktree "$wt"; then
+    skipped_dirty=$((skipped_dirty + 1))
+    echo "[agent-worktree-prune] Skipping dirty worktree (${remove_reason}): ${wt}"
     return
   fi
 
@@ -149,7 +214,10 @@ done < <(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads
 
 run_cmd git -C "$repo_root" worktree prune
 
-echo "[agent-worktree-prune] Summary: removed_worktrees=${removed_worktrees}, removed_branches=${removed_branches}, skipped_active=${skipped_active}"
+echo "[agent-worktree-prune] Summary: base=${BASE_BRANCH}, removed_worktrees=${removed_worktrees}, removed_branches=${removed_branches}, skipped_active=${skipped_active}, skipped_dirty=${skipped_dirty}"
 if [[ "$skipped_active" -gt 0 ]]; then
   echo "[agent-worktree-prune] Tip: leave active agent worktree directories, then run this command again for full cleanup." >&2
+fi
+if [[ "$skipped_dirty" -gt 0 ]]; then
+  echo "[agent-worktree-prune] Tip: dirty worktrees were preserved. Clean/finish them first, or pass --force-dirty to remove anyway." >&2
 fi
