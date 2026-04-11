@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "$branch" ]]; then
+  exit 0
+fi
+
+if [[ "${ALLOW_COMMIT_ON_PROTECTED_BRANCH:-0}" == "1" ]]; then
+  exit 0
+fi
+
+is_vscode_git_context=0
+if [[ -n "${VSCODE_GIT_IPC_HANDLE:-}" || -n "${VSCODE_GIT_ASKPASS_NODE:-}" || -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
+  is_vscode_git_context=1
+fi
+
+allow_vscode_protected_branch_raw="${MUSAFETY_ALLOW_VSCODE_PROTECTED_BRANCH:-$(git config --get multiagent.protectedBranches.allowVSCode || true)}"
+allow_vscode_protected_branch_raw="$(printf '%s' "${allow_vscode_protected_branch_raw:-}" | tr '[:upper:]' '[:lower:]')"
+allow_vscode_protected_branch=0
+case "$allow_vscode_protected_branch_raw" in
+  1|true|yes|on) allow_vscode_protected_branch=1 ;;
+  *) allow_vscode_protected_branch=0 ;;
+esac
+
+protected_branches_raw="${MUSAFETY_PROTECTED_BRANCHES:-$(git config --get multiagent.protectedBranches || true)}"
+if [[ -z "$protected_branches_raw" ]]; then
+  protected_branches_raw="dev main master"
+fi
+protected_branches_raw="${protected_branches_raw//,/ }"
+
+is_protected_branch=0
+for protected_branch in $protected_branches_raw; do
+  if [[ "$branch" == "$protected_branch" ]]; then
+    is_protected_branch=1
+    break
+  fi
+done
+
+if [[ "$is_protected_branch" == "1" ]]; then
+  if [[ "$is_vscode_git_context" == "1" && "$allow_vscode_protected_branch" == "1" ]]; then
+    exit 0
+  fi
+
+  git_dir="$(git rev-parse --git-dir)"
+  if [[ -f "$git_dir/MERGE_HEAD" ]]; then
+    exit 0
+  fi
+
+  cat >&2 <<'MSG'
+[agent-branch-guard] Direct commits on protected branches are blocked.
+Use an agent branch first:
+  bash scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"
+After finishing work:
+  bash scripts/agent-branch-finish.sh
+
+Optional repo override to allow VS Code Source Control commits:
+  git config multiagent.protectedBranches.allowVSCode true
+
+Temporary bypass (not recommended):
+  ALLOW_COMMIT_ON_PROTECTED_BRANCH=1 git commit ...
+MSG
+  exit 1
+fi
+
+if [[ "$branch" == agent/* ]]; then
+  if ! python3 scripts/agent-file-locks.py validate --branch "$branch" --staged; then
+    cat >&2 <<'MSG'
+[agent-branch-guard] Agent branch commits require file ownership locks.
+Claim files first:
+  python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
+MSG
+    exit 1
+  fi
+
+  require_sync_before_commit_raw="$(git config --get multiagent.sync.requireBeforeCommit || true)"
+  if [[ -z "$require_sync_before_commit_raw" ]]; then
+    require_sync_before_commit_raw="false"
+  fi
+  require_sync_before_commit="$(printf '%s' "$require_sync_before_commit_raw" | tr '[:upper:]' '[:lower:]')"
+
+  should_require_sync=0
+  case "$require_sync_before_commit" in
+    1|true|yes|on) should_require_sync=1 ;;
+    0|false|no|off) should_require_sync=0 ;;
+    *) should_require_sync=0 ;;
+  esac
+
+  if [[ "$should_require_sync" == "1" ]]; then
+    base_branch="$(git config --get multiagent.baseBranch || true)"
+    if [[ -z "$base_branch" ]]; then
+      base_branch="dev"
+    fi
+
+    max_behind_raw="$(git config --get multiagent.sync.maxBehindCommits || true)"
+    if [[ -z "$max_behind_raw" ]]; then
+      max_behind_raw="0"
+    fi
+    if [[ ! "$max_behind_raw" =~ ^[0-9]+$ ]]; then
+      echo "[agent-sync-guard] Invalid multiagent.sync.maxBehindCommits value: ${max_behind_raw}" >&2
+      echo "[agent-sync-guard] Expected non-negative integer. Example: git config multiagent.sync.maxBehindCommits 0" >&2
+      exit 1
+    fi
+
+    if ! git fetch origin "$base_branch" --quiet >/dev/null 2>&1; then
+      echo "[agent-sync-guard] Unable to fetch origin/${base_branch} while commit sync gate is enabled." >&2
+      echo "[agent-sync-guard] Disable gate temporarily with: git config multiagent.sync.requireBeforeCommit false" >&2
+      exit 1
+    fi
+
+    if ! git show-ref --verify --quiet "refs/remotes/origin/${base_branch}"; then
+      echo "[agent-sync-guard] Remote base branch not found: origin/${base_branch}" >&2
+      exit 1
+    fi
+
+    behind_count="$(git rev-list --left-right --count "${branch}...origin/${base_branch}" 2>/dev/null | awk '{print $2}')"
+    behind_count="${behind_count:-0}"
+    max_behind="${max_behind_raw}"
+
+    if [[ "$behind_count" -gt "$max_behind" ]]; then
+      cat >&2 <<MSG
+[agent-sync-guard] Commit blocked: '${branch}' is behind origin/${base_branch} by ${behind_count} commit(s) (max allowed: ${max_behind}).
+Run:
+  musafety sync --base ${base_branch}
+Or relax threshold:
+  git config multiagent.sync.maxBehindCommits <n>
+MSG
+      exit 1
+    fi
+  fi
+fi
+
+if command -v pre-commit >/dev/null 2>&1 && [[ -f .pre-commit-config.yaml ]]; then
+  pre-commit run --hook-stage pre-commit
+fi

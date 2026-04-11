@@ -128,6 +128,7 @@ Example output:
 npm i -g musafety
 musafety setup
 musafety doctor
+bash scripts/codex-agent.sh "task" "agent-name"
 bash scripts/agent-branch-start.sh "task" "agent-name"
 python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
 bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
@@ -157,6 +158,7 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
    musafety doctor
 
 4) Confirm next safe agent workflow commands:
+   bash scripts/codex-agent.sh "task" "agent-name"
    bash scripts/agent-branch-start.sh "task" "agent-name"
    python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
    bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
@@ -275,6 +277,7 @@ multiagent.protectedBranches
 - risky stale/missing lock state
 - accidental loss of critical guardrail files
 - setup also writes a managed `.gitignore` block so generated musafety scripts/hooks stay out of normal git status noise by default
+  - includes `oh-my-codex/` by default to keep local OMX source clones out of repo status
   - pass `--no-gitignore` if you want to keep tracking these files in git
 
 ## Files it installs
@@ -282,6 +285,7 @@ multiagent.protectedBranches
 ```text
 scripts/agent-branch-start.sh
 scripts/agent-branch-finish.sh
+scripts/codex-agent.sh
 scripts/agent-worktree-prune.sh
 scripts/agent-file-locks.py
 scripts/install-agent-git-hooks.sh
