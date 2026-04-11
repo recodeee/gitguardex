@@ -241,6 +241,9 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
 7) Optional: sync your current agent branch with latest base branch:
    gx sync --check
    gx sync
+
+8) Optional (GitHub remote cleanup): enable:
+   Settings -> General -> Pull Requests -> Automatically delete head branches
 ```
 
 ## Basic commands
