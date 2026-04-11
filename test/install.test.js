@@ -63,6 +63,14 @@ function createFakeCodexAuthScript(scriptBody) {
   return { fakeBin, fakePath };
 }
 
+function createFakeGhScript(scriptBody) {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-fake-gh-'));
+  const fakePath = path.join(fakeBin, 'gh');
+  fs.writeFileSync(fakePath, `#!/usr/bin/env bash\nset -e\n${scriptBody}\n`, 'utf8');
+  fs.chmodSync(fakePath, 0o755);
+  return { fakeBin, fakePath };
+}
+
 function initRepo() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'musafety-'));
   const repoDir = path.join(tempDir, 'repo');
@@ -753,6 +761,70 @@ test('agent-branch-finish blocks when source branch is behind origin/dev', () =>
   assert.equal(finish.status, 1, finish.stderr || finish.stdout);
   assert.match(finish.stderr, /agent-sync-guard/);
   assert.match(finish.stderr, /musafety sync --base dev/);
+});
+
+test('agent-branch-finish pr mode continues cleanup when gh merge only fails local branch deletion', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply musafety setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['push', 'origin', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  result = runCmd('git', ['checkout', '-b', 'agent/test-pr-delete-error'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  commitFile(repoDir, 'agent-pr-delete.txt', 'agent change\n', 'agent change');
+
+  const { fakePath: fakeGhPath } = createFakeGhScript(`
+if [[ "$1" == "pr" && "$2" == "create" ]]; then
+  exit 0
+fi
+if [[ "$1" == "pr" && "$2" == "view" ]]; then
+  if [[ " $* " == *" --json url "* ]]; then
+    echo "https://example.test/pr/1"
+    exit 0
+  fi
+  echo "unexpected gh pr view args: $*" >&2
+  exit 1
+fi
+if [[ "$1" == "pr" && "$2" == "merge" ]]; then
+  echo "failed to delete local branch $3: error: cannot delete branch '$3' used by worktree at '/tmp/demo-worktree'" >&2
+  echo "/usr/bin/git: exit status 1" >&2
+  exit 1
+fi
+echo "unexpected gh args: $*" >&2
+exit 1
+`);
+
+  const finish = runCmd(
+    'bash',
+    ['scripts/agent-branch-finish.sh', '--branch', 'agent/test-pr-delete-error', '--mode', 'pr'],
+    repoDir,
+    { MUSAFETY_GH_BIN: fakeGhPath },
+  );
+  assert.equal(finish.status, 0, finish.stderr || finish.stdout);
+  assert.match(
+    finish.stderr,
+    /PR merged but gh could not delete the local branch \(active worktree\); continuing local cleanup\./,
+  );
+  assert.match(
+    finish.stdout,
+    /Merged 'agent\/test-pr-delete-error' into 'dev' via pr flow and removed branch\./,
+  );
+
+  result = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-pr-delete-error'], repoDir);
+  assert.notEqual(result.status, 0, 'agent branch should be deleted locally');
+
+  result = runCmd('git', ['ls-remote', '--heads', 'origin', 'agent/test-pr-delete-error'], repoDir);
+  assert.equal(result.stdout.trim(), '', 'agent branch should be deleted on origin');
 });
 
 test('OpenSpec plan workspace scaffold creates expected role/task structure', () => {
