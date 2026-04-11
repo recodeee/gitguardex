@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.repository == 'recodeecom/multiagent-safety'
+    if: github.repository == 'recodeecom/musafety'
     runs-on: ubuntu-latest
     environment: npm
 
