@@ -48,7 +48,6 @@ Alias support:
 
 - preferred: `gx`
 - full: `guardex`
-- legacy: `musafety`, `multiagent-safety`
 
 ## Copy-paste: daily workflow (per new user task)
 
@@ -88,14 +87,6 @@ If you use `scripts/codex-agent.sh`, the finish flow is auto-run after the Codex
 ### Lock + delete guard protocol
 
 ![gx lock and delete guard screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-lock-guard.svg)
-
-### Source control visibility
-
-![gx source control multi-agent screenshot](https://raw.githubusercontent.com/recodeecom/multiagent-safety/main/docs/images/workflow-source-control.svg)
-
-### Real VS Code Source Control example
-
-![GuardeX real VS Code Source Control layout](./docs/images/workflow-vscode-guardex-real.png)
 
 ## Copy-paste: common commands
 
