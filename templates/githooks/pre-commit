@@ -28,6 +28,19 @@ if [[ -n "${VSCODE_GIT_IPC_HANDLE:-}" || -n "${VSCODE_GIT_ASKPASS_NODE:-}" || -n
   is_vscode_git_context=1
 fi
 
+allow_vscode_protected_raw="${MUSAFETY_ALLOW_VSCODE_PROTECTED_BRANCH_WRITES:-$(git config --get multiagent.allowVscodeProtectedBranchWrites || true)}"
+if [[ -z "$allow_vscode_protected_raw" ]]; then
+  allow_vscode_protected_raw="false"
+fi
+allow_vscode_protected="$(printf '%s' "$allow_vscode_protected_raw" | tr '[:upper:]' '[:lower:]')"
+
+allow_vscode_protected_branch_writes=0
+case "$allow_vscode_protected" in
+  1|true|yes|on) allow_vscode_protected_branch_writes=1 ;;
+  0|false|no|off) allow_vscode_protected_branch_writes=0 ;;
+  *) allow_vscode_protected_branch_writes=0 ;;
+esac
+
 protected_branches_raw="${MUSAFETY_PROTECTED_BRANCHES:-$(git config --get multiagent.protectedBranches || true)}"
 if [[ -z "$protected_branches_raw" ]]; then
   protected_branches_raw="dev main master"
@@ -111,7 +124,7 @@ MSG
 fi
 
 if [[ "$is_protected_branch" == "1" ]]; then
-  if [[ "$is_codex_session" != "1" && "$is_vscode_git_context" == "1" ]]; then
+  if [[ "$is_codex_session" != "1" && "$is_vscode_git_context" == "1" && "$allow_vscode_protected_branch_writes" == "1" ]]; then
     exit 0
   fi
 
@@ -130,6 +143,9 @@ Use an agent branch first:
   bash scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"
 After finishing work:
   bash scripts/agent-branch-finish.sh
+
+Optional repo override for manual VS Code protected-branch commits:
+  git config multiagent.allowVscodeProtectedBranchWrites true
 
 Temporary bypass (not recommended):
   ALLOW_COMMIT_ON_PROTECTED_BRANCH=1 git commit ...
