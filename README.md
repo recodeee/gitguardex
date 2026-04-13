@@ -245,9 +245,10 @@ npm pack --dry-run
 
 ## Release notes
 
-### v5.0.7
+### Unreleased (generated draft, not versioned yet)
 
-- Bumped package version from `5.0.6` to `5.0.7` to stay one patch ahead for the next npm publish.
+- Add the user-facing changes for the next release here before assigning a version number.
+- Keep this section focused on behavior changes (`Added`, `Changed`, `Fixed`) rather than version-bump-only notes.
 
 ### v5.0.6
 
