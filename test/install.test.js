@@ -2322,6 +2322,41 @@ test('worktree prune --only-dirty-worktrees removes clean agent worktrees but ke
   assert.equal(branchResult.status, 0, 'unmerged branch ref should remain');
 });
 
+test('worktree prune reroutes foreign worktrees to the owning repo .omx root', () => {
+  const repoDir = initRepo();
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  const foreignRepoDir = initRepo();
+  seedCommit(foreignRepoDir);
+
+  const misplacedPath = path.join(repoDir, '.omx', 'agent-worktrees', 'agent__foreign-owned');
+  result = runCmd(
+    'git',
+    ['-C', foreignRepoDir, 'worktree', 'add', '-b', 'agent/foreign-owned', misplacedPath, 'dev'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(misplacedPath), true, 'foreign worktree should start misplaced under current repo');
+
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Relocating foreign worktree to owning repo/);
+  assert.equal(fs.existsSync(misplacedPath), false, 'misplaced foreign worktree should be moved out');
+
+  const foreignWorktreeRoot = path.join(foreignRepoDir, '.omx', 'agent-worktrees');
+  const relocatedCandidates = fs.existsSync(foreignWorktreeRoot)
+    ? fs.readdirSync(foreignWorktreeRoot).filter((name) => name.startsWith('agent__foreign-owned'))
+    : [];
+  assert.equal(relocatedCandidates.length > 0, true, 'foreign repo should receive relocated worktree');
+
+  const relocatedPath = path.join(foreignWorktreeRoot, relocatedCandidates[0]);
+  const commonDirResult = runCmd('git', ['-C', relocatedPath, 'rev-parse', '--git-common-dir'], repoDir);
+  assert.equal(commonDirResult.status, 0, commonDirResult.stderr || commonDirResult.stdout);
+  assert.match(commonDirResult.stdout.trim(), new RegExp(`${escapeRegexLiteral(foreignRepoDir)}/\\.git$`));
+});
+
 test('cleanup command removes merged agent branch/worktree and remote ref', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);

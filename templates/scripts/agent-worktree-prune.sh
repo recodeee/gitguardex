@@ -61,6 +61,11 @@ fi
 repo_root="$(git rev-parse --show-toplevel)"
 current_pwd="$(pwd -P)"
 worktree_root="${repo_root}/.omx/agent-worktrees"
+repo_common_dir="$(
+  git -C "$repo_root" rev-parse --git-common-dir \
+    | awk -v root="$repo_root" '{ if ($0 ~ /^\//) { print $0 } else { print root "/" $0 } }'
+)"
+repo_common_dir="$(cd "$repo_common_dir" && pwd -P)"
 
 resolve_base_branch() {
   local configured=""
@@ -132,10 +137,97 @@ is_clean_worktree() {
     && [[ -z "$(git -C "$wt" ls-files --others --exclude-standard)" ]]
 }
 
+resolve_worktree_common_dir() {
+  local wt="$1"
+  local common_dir=""
+  common_dir="$(git -C "$wt" rev-parse --git-common-dir 2>/dev/null || true)"
+  if [[ -z "$common_dir" ]]; then
+    return 1
+  fi
+  if [[ "$common_dir" == /* ]]; then
+    common_dir="$(cd "$common_dir" 2>/dev/null && pwd -P || true)"
+  else
+    common_dir="$(cd "$wt/$common_dir" 2>/dev/null && pwd -P || true)"
+  fi
+  if [[ -z "$common_dir" ]]; then
+    return 1
+  fi
+  printf '%s' "$common_dir"
+}
+
+select_unique_worktree_path() {
+  local root="$1"
+  local name="$2"
+  local candidate="${root}/${name}"
+  local suffix=2
+  while [[ -e "$candidate" ]]; do
+    candidate="${root}/${name}-${suffix}"
+    suffix=$((suffix + 1))
+  done
+  printf '%s' "$candidate"
+}
+
+relocated_foreign=0
+skipped_foreign=0
+
+relocate_foreign_worktree_entries() {
+  [[ -d "$worktree_root" ]] || return 0
+
+  local entry=""
+  for entry in "${worktree_root}"/*; do
+    [[ -d "$entry" ]] || continue
+    if ! git -C "$entry" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      continue
+    fi
+
+    local entry_common_dir=""
+    entry_common_dir="$(resolve_worktree_common_dir "$entry" || true)"
+    [[ -n "$entry_common_dir" ]] || continue
+
+    if [[ "$entry_common_dir" == "$repo_common_dir" ]]; then
+      continue
+    fi
+
+    if [[ "$(basename "$entry_common_dir")" != ".git" ]]; then
+      skipped_foreign=$((skipped_foreign + 1))
+      echo "[agent-worktree-prune] Skipping foreign worktree with unsupported git common dir: ${entry}"
+      continue
+    fi
+
+    local owner_repo_root
+    owner_repo_root="$(dirname "$entry_common_dir")"
+    local owner_worktree_root="${owner_repo_root}/.omx/agent-worktrees"
+    local target_path
+    target_path="$(select_unique_worktree_path "$owner_worktree_root" "$(basename "$entry")")"
+
+    if [[ "$entry" == "$current_pwd" || "$current_pwd" == "${entry}"/* ]]; then
+      skipped_foreign=$((skipped_foreign + 1))
+      echo "[agent-worktree-prune] Skipping active foreign worktree: ${entry}"
+      continue
+    fi
+
+    echo "[agent-worktree-prune] Relocating foreign worktree to owning repo: ${entry} -> ${target_path}"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      relocated_foreign=$((relocated_foreign + 1))
+      continue
+    fi
+
+    mkdir -p "$owner_worktree_root"
+    if git -C "$owner_repo_root" worktree move "$entry" "$target_path" >/dev/null 2>&1; then
+      relocated_foreign=$((relocated_foreign + 1))
+    else
+      skipped_foreign=$((skipped_foreign + 1))
+      echo "[agent-worktree-prune] Failed to relocate foreign worktree: ${entry}" >&2
+    fi
+  done
+}
+
 removed_worktrees=0
 removed_branches=0
 skipped_active=0
 skipped_dirty=0
+
+relocate_foreign_worktree_entries
 
 process_entry() {
   local wt="$1"
@@ -265,6 +357,9 @@ fi
 run_cmd git -C "$repo_root" worktree prune
 
 echo "[agent-worktree-prune] Summary: base=${BASE_BRANCH}, removed_worktrees=${removed_worktrees}, removed_branches=${removed_branches}, skipped_active=${skipped_active}, skipped_dirty=${skipped_dirty}"
+if [[ "$relocated_foreign" -gt 0 || "$skipped_foreign" -gt 0 ]]; then
+  echo "[agent-worktree-prune] Foreign routing: relocated=${relocated_foreign}, skipped=${skipped_foreign}"
+fi
 if [[ "$skipped_active" -gt 0 ]]; then
   echo "[agent-worktree-prune] Tip: leave active agent worktree directories, then run this command again for full cleanup." >&2
 fi
