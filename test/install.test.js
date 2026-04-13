@@ -990,10 +990,44 @@ test('default invocation runs non-mutating status output', () => {
   assert.match(result.stdout, /COMMANDS\n\s+status\s+Show GuardeX CLI \+ service health without modifying files/);
   assert.match(
     result.stdout,
-    /AGENT BOT\n\s+review\s+Monitor open PRs targeting current branch and dispatch codex-agent review flow/,
+    /AGENT BOT\n\s+review\s+Start PR monitor \+ codex-agent review flow \(default interval: 30s\)/,
   );
-  assert.match(result.stdout, /AGENT BOT[\s\S]*\n\s+start\s+bash scripts\/review-bot-watch\.sh --interval 30/);
+  assert.doesNotMatch(result.stdout, /AGENT BOT[\s\S]*\n\s+start\s+/);
   assert.equal(fs.existsSync(path.join(repoDir, '.githooks', 'pre-commit')), false);
+});
+
+test('review command launches local review-bot script and accepts legacy start token', () => {
+  const repoDir = initRepo();
+  const scriptsDir = path.join(repoDir, 'scripts');
+  fs.mkdirSync(scriptsDir, { recursive: true });
+  const reviewScript = path.join(scriptsDir, 'review-bot-watch.sh');
+  const markerCwd = path.join(repoDir, '.review-bot-cwd');
+  const markerArgs = path.join(repoDir, '.review-bot-args');
+  fs.writeFileSync(
+    reviewScript,
+    '#!/usr/bin/env bash\n' +
+      'set -euo pipefail\n' +
+      `printf '%s\\n' \"$PWD\" > \"${markerCwd}\"\n` +
+      `printf '%s\\n' \"$*\" > \"${markerArgs}\"\n`,
+    'utf8',
+  );
+  fs.chmodSync(reviewScript, 0o755);
+
+  const result = runNode(['review', 'start', '--target', repoDir, '--interval', '45', '--once'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.readFileSync(markerCwd, 'utf8').trim(), repoDir);
+  assert.equal(fs.readFileSync(markerArgs, 'utf8').trim(), '--interval 45 --once');
+});
+
+test('review command explains setup + doctor steps when script is missing in target repo', () => {
+  const repoDir = initRepo();
+
+  const result = runNode(['review', '--target', repoDir], repoDir);
+  assert.equal(result.status, 1, result.stderr || result.stdout);
+  assert.match(
+    result.stderr,
+    new RegExp(`Run 'gx setup --target ${escapeRegexLiteral(repoDir)}' then 'gx doctor --target ${escapeRegexLiteral(repoDir)}'`),
+  );
 });
 
 test('status prints GitHub CLI service with friendly label', () => {
