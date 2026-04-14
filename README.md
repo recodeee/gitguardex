@@ -241,6 +241,12 @@ scripts/openspec/init-plan-workspace.sh
 
 If `package.json` exists, setup also adds `agent:*` helper scripts.
 
+## OpenSpec quick start after `gx setup`
+
+If you enabled global OpenSpec install during setup (`@fission-ai/openspec`), use the full guide here:
+
+- [`docs/openspec-getting-started.md`](./docs/openspec-getting-started.md)
+
 ## Security and maintenance posture
 
 - CI matrix on Node 18/20/22 (`npm test`, `node --check`, `npm pack --dry-run`)
