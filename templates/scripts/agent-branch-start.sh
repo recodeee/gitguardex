@@ -6,6 +6,8 @@ AGENT_NAME="agent"
 BASE_BRANCH=""
 BASE_BRANCH_EXPLICIT=0
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
+OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-false}"
+OPENSPEC_PLAN_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_PLAN_SLUG:-}"
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -80,6 +82,31 @@ sanitize_slug() {
     slug="$fallback"
   fi
   printf '%s' "$slug"
+}
+
+normalize_bool() {
+  local raw="${1:-}"
+  local fallback="${2:-0}"
+  local lowered
+  lowered="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    1|true|yes|on) printf '1' ;;
+    0|false|no|off) printf '0' ;;
+    '') printf '%s' "$fallback" ;;
+    *) printf '%s' "$fallback" ;;
+  esac
+}
+
+OPENSPEC_AUTO_INIT="$(normalize_bool "$OPENSPEC_AUTO_INIT_RAW" "1")"
+
+resolve_openspec_plan_slug() {
+  local branch_name="$1"
+  local task_slug="$2"
+  if [[ -n "$OPENSPEC_PLAN_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_PLAN_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "${branch_name//\//-}" "$task_slug"
 }
 
 resolve_active_codex_snapshot_name() {
@@ -166,6 +193,43 @@ hydrate_local_helper_in_worktree() {
   echo "[agent-branch-start] Hydrated local helper in worktree: ${relative_path}"
 }
 
+initialize_openspec_plan_workspace() {
+  local repo="$1"
+  local worktree="$2"
+  local plan_slug="$3"
+
+  hydrate_local_helper_in_worktree "$repo" "$worktree" "scripts/openspec/init-plan-workspace.sh"
+
+  if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
+    return 0
+  fi
+
+  local openspec_script="${worktree}/scripts/openspec/init-plan-workspace.sh"
+  if [[ ! -f "$openspec_script" ]]; then
+    echo "[agent-branch-start] OpenSpec init script is missing in sandbox worktree." >&2
+    echo "[agent-branch-start] Run 'gx setup --target \"$repo\"' to repair templates, then retry." >&2
+    return 1
+  fi
+  if [[ ! -x "$openspec_script" ]]; then
+    chmod +x "$openspec_script" 2>/dev/null || true
+  fi
+
+  local init_output=""
+  if ! init_output="$(
+    cd "$worktree"
+    bash "scripts/openspec/init-plan-workspace.sh" "$plan_slug" 2>&1
+  )"; then
+    printf '%s\n' "$init_output" >&2
+    echo "[agent-branch-start] OpenSpec workspace initialization failed for plan '${plan_slug}'." >&2
+    return 1
+  fi
+
+  if [[ -n "$init_output" ]]; then
+    printf '%s\n' "$init_output"
+  fi
+  echo "[agent-branch-start] OpenSpec plan workspace: ${worktree}/openspec/plan/${plan_slug}"
+}
+
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[agent-branch-start] Not inside a git repository." >&2
   exit 1
@@ -227,6 +291,7 @@ done
 worktree_root="${repo_root}/${WORKTREE_ROOT_REL}"
 mkdir -p "$worktree_root"
 worktree_path="${worktree_root}/${branch_name//\//__}"
+openspec_plan_slug="$(resolve_openspec_plan_slug "$branch_name" "$task_slug")"
 
 if [[ -e "$worktree_path" ]]; then
   echo "[agent-branch-start] Worktree path already exists: ${worktree_path}" >&2
@@ -276,9 +341,13 @@ if [[ -n "$auto_transfer_stash_ref" ]]; then
 fi
 
 hydrate_local_helper_in_worktree "$repo_root" "$worktree_path" "scripts/codex-agent.sh"
+if ! initialize_openspec_plan_workspace "$repo_root" "$worktree_path" "$openspec_plan_slug"; then
+  exit 1
+fi
 
 echo "[agent-branch-start] Created branch: ${branch_name}"
 echo "[agent-branch-start] Worktree: ${worktree_path}"
+echo "[agent-branch-start] OpenSpec plan: openspec/plan/${openspec_plan_slug}"
 echo "[agent-branch-start] Next steps:"
 echo "  cd \"${worktree_path}\""
 echo "  python3 scripts/agent-file-locks.py claim --branch \"${branch_name}\" <file...>"

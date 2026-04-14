@@ -247,6 +247,13 @@ If you enabled global OpenSpec install during setup (`@fission-ai/openspec`), us
 
 - [`docs/openspec-getting-started.md`](./docs/openspec-getting-started.md)
 
+### OpenSpec in agent sub-branches
+
+- `scripts/codex-agent.sh` enforces an OpenSpec workspace before it launches Codex in each sandbox branch/worktree.
+- `scripts/agent-branch-start.sh` can also scaffold `openspec/plan/<agent-branch-slug>/` when you set `MUSAFETY_OPENSPEC_AUTO_INIT=true`.
+- Set `MUSAFETY_OPENSPEC_AUTO_INIT=false` (default for `agent-branch-start`) to skip branch-start auto-bootstrap.
+- Set `MUSAFETY_OPENSPEC_PLAN_SLUG=<kebab-case-slug>` to force a specific plan workspace name.
+
 ## Security and maintenance posture
 
 - CI matrix on Node 18/20/22 (`npm test`, `node --check`, `npm pack --dry-run`)

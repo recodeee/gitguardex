@@ -10,6 +10,8 @@ AUTO_FINISH_RAW="${MUSAFETY_CODEX_AUTO_FINISH:-true}"
 AUTO_REVIEW_ON_CONFLICT_RAW="${MUSAFETY_CODEX_AUTO_REVIEW_ON_CONFLICT:-true}"
 AUTO_CLEANUP_RAW="${MUSAFETY_CODEX_AUTO_CLEANUP:-true}"
 AUTO_WAIT_FOR_MERGE_RAW="${MUSAFETY_CODEX_WAIT_FOR_MERGE:-true}"
+OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-true}"
+OPENSPEC_PLAN_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_PLAN_SLUG:-}"
 
 normalize_bool() {
   local raw="${1:-}"
@@ -28,6 +30,7 @@ AUTO_FINISH="$(normalize_bool "$AUTO_FINISH_RAW" "1")"
 AUTO_REVIEW_ON_CONFLICT="$(normalize_bool "$AUTO_REVIEW_ON_CONFLICT_RAW" "1")"
 AUTO_CLEANUP="$(normalize_bool "$AUTO_CLEANUP_RAW" "1")"
 AUTO_WAIT_FOR_MERGE="$(normalize_bool "$AUTO_WAIT_FOR_MERGE_RAW" "1")"
+OPENSPEC_AUTO_INIT="$(normalize_bool "$OPENSPEC_AUTO_INIT_RAW" "1")"
 
 if [[ -n "$BASE_BRANCH" ]]; then
   BASE_BRANCH_EXPLICIT=1
@@ -136,6 +139,46 @@ sanitize_slug() {
   printf '%s' "$slug"
 }
 
+resolve_openspec_plan_slug() {
+  local branch_name="$1"
+  local task_slug
+  task_slug="$(sanitize_slug "$TASK_NAME" "task")"
+  if [[ -n "$OPENSPEC_PLAN_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_PLAN_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "${branch_name//\//-}" "$task_slug"
+}
+
+hydrate_local_helper_in_worktree() {
+  local worktree="$1"
+  local relative_path="$2"
+  local worktree_target="${worktree}/${relative_path}"
+  local source_path=""
+
+  if [[ -e "$worktree_target" ]]; then
+    return 0
+  fi
+
+  if [[ -f "${repo_root}/${relative_path}" ]]; then
+    source_path="${repo_root}/${relative_path}"
+  elif [[ -f "${repo_root}/templates/${relative_path}" ]]; then
+    source_path="${repo_root}/templates/${relative_path}"
+  fi
+
+  if [[ -z "$source_path" ]]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$worktree_target")"
+  cp "$source_path" "$worktree_target"
+  if [[ -x "$source_path" ]]; then
+    chmod +x "$worktree_target"
+  fi
+
+  echo "[codex-agent] Hydrated local helper in sandbox: ${relative_path}"
+}
+
 resolve_start_base_branch() {
   if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -n "$BASE_BRANCH" ]]; then
     printf '%s' "$BASE_BRANCH"
@@ -239,7 +282,7 @@ initial_repo_branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/nu
 start_output=""
 start_status=0
 set +e
-start_output="$(bash "${repo_root}/scripts/agent-branch-start.sh" "${start_args[@]}" 2>&1)"
+start_output="$(MUSAFETY_OPENSPEC_AUTO_INIT=0 bash "${repo_root}/scripts/agent-branch-start.sh" "${start_args[@]}" 2>&1)"
 start_status=$?
 set -e
 
@@ -361,6 +404,43 @@ sync_worktree_with_base() {
   fi
   echo "[codex-agent] Task sync complete."
   return 0
+}
+
+ensure_openspec_plan_workspace() {
+  local wt="$1"
+  local branch="$2"
+
+  if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
+    return 0
+  fi
+
+  hydrate_local_helper_in_worktree "$wt" "scripts/openspec/init-plan-workspace.sh"
+
+  local openspec_script="${wt}/scripts/openspec/init-plan-workspace.sh"
+  if [[ ! -f "$openspec_script" ]]; then
+    echo "[codex-agent] Missing OpenSpec init script in sandbox: ${openspec_script}" >&2
+    echo "[codex-agent] Run 'gx setup --target ${repo_root}' and retry." >&2
+    return 1
+  fi
+  if [[ ! -x "$openspec_script" ]]; then
+    chmod +x "$openspec_script" 2>/dev/null || true
+  fi
+
+  local plan_slug
+  plan_slug="$(resolve_openspec_plan_slug "$branch")"
+  local init_output=""
+  if ! init_output="$(
+    cd "$wt"
+    bash "scripts/openspec/init-plan-workspace.sh" "$plan_slug" 2>&1
+  )"; then
+    printf '%s\n' "$init_output" >&2
+    echo "[codex-agent] OpenSpec workspace initialization failed for plan '${plan_slug}'." >&2
+    return 1
+  fi
+  if [[ -n "$init_output" ]]; then
+    printf '%s\n' "$init_output"
+  fi
+  echo "[codex-agent] OpenSpec plan workspace: ${wt}/openspec/plan/${plan_slug}"
 }
 
 worktree_has_changes() {
@@ -579,6 +659,16 @@ if ! sync_worktree_with_base "$worktree_path"; then
   exit 1
 fi
 
+worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "$worktree_branch" || "$worktree_branch" == "HEAD" ]]; then
+  echo "[codex-agent] Could not determine sandbox branch for worktree: $worktree_path" >&2
+  exit 1
+fi
+
+if ! ensure_openspec_plan_workspace "$worktree_path" "$worktree_branch"; then
+  exit 1
+fi
+
 echo "[codex-agent] Launching ${CODEX_BIN} in sandbox: $worktree_path"
 cd "$worktree_path"
 set +e
@@ -589,8 +679,6 @@ set -e
 cd "$repo_root"
 final_exit="$codex_exit"
 auto_finish_completed=0
-
-worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [[ "$AUTO_FINISH" -eq 1 && -n "$worktree_branch" && "$worktree_branch" != "HEAD" ]]; then
   if [[ "$AUTO_WAIT_FOR_MERGE" -eq 1 && "$AUTO_CLEANUP" -eq 1 ]]; then
