@@ -127,9 +127,17 @@ OMX runtime state typically lives under `.omx/`:
 - Verification commands + results
 - Risks / follow-ups
 
-## OpenSpec Plan Workspace (recommended)
+## OpenSpec Plan Workspace (required for agent sub-branch changes)
 
-When work needs a durable planning phase, scaffold a plan workspace before implementation:
+OMX Codex execution flows must use OpenSpec. `scripts/codex-agent.sh` bootstraps a
+per-branch plan workspace automatically under:
+
+```text
+openspec/plan/<agent-branch-slug>/
+```
+
+For manual `scripts/agent-branch-start.sh` usage, enable auto-bootstrap with
+`MUSAFETY_OPENSPEC_AUTO_INIT=true` or scaffold manually before implementation:
 
 ```bash
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"

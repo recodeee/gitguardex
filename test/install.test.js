@@ -188,6 +188,22 @@ function extractCreatedWorktree(output) {
   return match[1].trim();
 }
 
+function extractOpenSpecPlanSlug(output) {
+  const match = String(output || '').match(/\[agent-branch-start\] OpenSpec plan: openspec\/plan\/(.+)/);
+  assert.ok(match, `missing OpenSpec plan slug in output: ${output}`);
+  return match[1].trim();
+}
+
+function sanitizeSlug(value, fallback = 'task') {
+  const slug = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+    .replace(/-{2,}/g, '-');
+  return slug || fallback;
+}
+
 const spawnProbe = cp.spawnSync(process.execPath, ['-e', 'process.exit(0)'], { encoding: 'utf8' });
 const canSpawnChildProcesses = !spawnProbe.error && spawnProbe.status === 0;
 const spawnUnavailableReason = spawnProbe.error
@@ -904,6 +920,46 @@ test('setup agent-branch-start supports explicit snapshot override without codex
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Created branch: agent\/bot\/prod-snapshot-one-ship-fix(?:-\d+)?/);
+});
+
+test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  result = runCmd(
+    'bash',
+    ['scripts/agent-branch-start.sh', 'openspec-default', 'bot', 'dev'],
+    repoDir,
+    { env: { MUSAFETY_OPENSPEC_AUTO_INIT: 'true' } },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const defaultBranch = extractCreatedBranch(result.stdout);
+  const defaultWorktree = extractCreatedWorktree(result.stdout);
+  const defaultPlanSlug = extractOpenSpecPlanSlug(result.stdout);
+  assert.equal(defaultPlanSlug, sanitizeSlug(defaultBranch, 'openspec-default'));
+  assert.equal(
+    fs.existsSync(path.join(defaultWorktree, 'openspec', 'plan', defaultPlanSlug, 'summary.md')),
+    true,
+    'default branch start should scaffold OpenSpec plan workspace',
+  );
+
+  result = runCmd(
+    'bash',
+    ['scripts/agent-branch-start.sh', 'openspec-disabled', 'bot', 'dev'],
+    repoDir,
+    { env: { MUSAFETY_OPENSPEC_AUTO_INIT: 'false' } },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const disabledWorktree = extractCreatedWorktree(result.stdout);
+  const disabledPlanSlug = extractOpenSpecPlanSlug(result.stdout);
+  assert.equal(
+    fs.existsSync(path.join(disabledWorktree, 'openspec', 'plan', disabledPlanSlug, 'summary.md')),
+    false,
+    'OpenSpec auto-bootstrap should be skippable via MUSAFETY_OPENSPEC_AUTO_INIT=false',
+  );
 });
 
 test('setup agent-branch-start defaults base to current branch and stores per-branch base metadata', () => {
@@ -1651,9 +1707,16 @@ test('codex-agent launches codex inside a fresh sandbox worktree and keeps branc
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
 
   assert.equal(fs.existsSync(launchedCwd), true, 'clean codex-agent sandbox should stay available by default');
+  assert.match(launch.stdout, /\[codex-agent\] OpenSpec plan workspace:/);
   const launchedBranch = extractCreatedBranch(launch.stdout);
   const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${launchedBranch}`], repoDir);
   assert.equal(branchResult.status, 0, 'agent branch should remain after default codex-agent run');
+  const openspecPlanSlug = sanitizeSlug(launchedBranch, 'launch-task');
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'plan', openspecPlanSlug, 'summary.md')),
+    true,
+    'codex-agent should scaffold OpenSpec plan workspace in sandbox',
+  );
 });
 
 test('codex-agent restores local branch and falls back to safe worktree start when starter script switches in-place', () => {
@@ -1714,6 +1777,14 @@ test('codex-agent restores local branch and falls back to safe worktree start wh
     new RegExp(`${escapeRegexLiteral(repoDir)}/\\.omx/agent-worktrees/agent__planner__`),
   );
   assert.notEqual(launchedCwd, repoDir);
+  assert.match(combinedOutput, /\[codex-agent\] OpenSpec plan workspace:/);
+  const launchedBranch = extractCreatedBranch(combinedOutput);
+  const openspecPlanSlug = sanitizeSlug(launchedBranch, 'fallback-task');
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'plan', openspecPlanSlug, 'summary.md')),
+    true,
+    'fallback sandbox path should still scaffold OpenSpec plan workspace',
+  );
 
   const currentBranch = runCmd('git', ['branch', '--show-current'], repoDir);
   assert.equal(currentBranch.status, 0, currentBranch.stderr || currentBranch.stdout);
