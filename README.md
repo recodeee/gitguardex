@@ -328,6 +328,12 @@ npm pack --dry-run
 
 ## Release notes
 
+### v5.0.11
+
+- Updated the managed AGENTS contract wording to use `GX` naming and added an explicit OMX completion policy requiring commit + push + PR creation/update at task completion.
+- Ensured `gx install` explicitly configures the managed `AGENTS.md` policy block and added regression coverage for this install-path behavior.
+- Bumped package version from `5.0.10` to `5.0.11` for the next npm publish.
+
 ### v5.0.10
 
 - Bumped package version from `5.0.9` to `5.0.10` for the next npm publish.
