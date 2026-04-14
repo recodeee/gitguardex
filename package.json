@@ -29,7 +29,8 @@
     "agent:safety:scan": "gx scan",
     "agent:safety:fix": "gx fix",
     "agent:safety:doctor": "gx doctor",
-    "agent:review:watch": "bash ./scripts/review-bot-watch.sh"
+    "agent:review:watch": "bash ./scripts/review-bot-watch.sh",
+    "agent:finish": "gx finish --all"
   },
   "engines": {
     "node": ">=18"

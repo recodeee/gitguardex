@@ -93,8 +93,6 @@ OMX runtime state typically lives under `.omx/`:
 - If ownership is unclear or overlaps, stop that edit, post a blocker comment, and let the leader/integrator reassign scope.
 - For git isolation, each agent must start on a dedicated branch via `scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"`.
 - In-place branch mode is disallowed: never switch the active local/base checkout to an agent branch.
-- Do not implement changes directly on `main` or other base branches; all edits must happen on dedicated agent branches/worktrees.
-- If the current local branch already contains accidental edits, move them to an agent branch/worktree first, then continue implementation.
 - Treat the base branch (`main` or the user's current local base branch) as read-only while the agent branch is active.
 - Agent completion defaults to `scripts/codex-agent.sh`, which auto-finishes the branch (auto-commit changed files, push/create PR, attempt merge, and pull the local base branch after merge).
 - Auto-finish now waits for required checks/merge and then cleans merged sandbox branch/worktree by default.
@@ -102,7 +100,9 @@ OMX runtime state typically lives under `.omx/`:
 - If codex-agent auto-finish cannot complete, immediately run `scripts/agent-branch-finish.sh --branch "<agent-branch>" --via-pr --wait-for-merge` and keep the branch open until checks/review pass.
 - If merge/rebase conflicts block auto-finish, run a conflict-resolution review pass in that sandbox branch, then rerun `agent-branch-finish.sh --via-pr` until merged.
 - Completion is not valid until these are true: commit exists on the agent branch, branch is pushed to `origin`, and PR/merge status is produced by `agent-branch-finish.sh` or `codex-agent`.
-- Per-message loop is mandatory: for every new user message/task, start a fresh agent branch/worktree, claim ownership locks, implement and verify, finish via PR/merge cleanup, then repeat for the next message/task.
+- For every new task, if an assigned agent sub-branch/worktree is already open, continue in that sub-branch; otherwise create a fresh one from the current local base snapshot with `scripts/agent-branch-start.sh`.
+- Never implement directly on the local/base branch checkout; keep it unchanged and perform all edits in the agent sub-branch/worktree.
+- If the change publishes or bumps a version, the same change must also update release notes/changelog entries.
 
 1. Explicit ownership before edits
 
