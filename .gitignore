@@ -3,6 +3,7 @@ node_modules
 oh-my-codex/
 
 # multiagent-safety:START
+.omx/
 scripts/agent-branch-start.sh
 scripts/agent-branch-finish.sh
 scripts/codex-agent.sh
