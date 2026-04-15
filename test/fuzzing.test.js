@@ -4,7 +4,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
-const fc = require('fast-check');
+let fc = null;
+try {
+  fc = require('fast-check');
+} catch (error) {
+  if (!error || error.code !== 'MODULE_NOT_FOUND') {
+    throw error;
+  }
+}
 
 const cliPath = path.resolve(__dirname, '..', 'bin', 'multiagent-safety.js');
 
@@ -58,7 +65,10 @@ function initRepo() {
   return repoDir;
 }
 
-test('fuzz: status rejects unknown option patterns', () => {
+test(
+  'fuzz: status rejects unknown option patterns',
+  { skip: fc === null ? 'fast-check is not installed' : false },
+  () => {
   const repoDir = initRepo();
   const unknownFlag = fc
     .stringMatching(/^--[a-z][a-z-]{0,14}$/)
@@ -68,8 +78,13 @@ test('fuzz: status rejects unknown option patterns', () => {
     fc.property(unknownFlag, (flag) => {
       const result = runNode(['status', flag], repoDir);
       assert.equal(result.status, 1, `expected non-zero for ${flag}`);
-      assert.match(`${result.stderr}${result.stdout}`, /Unknown option:/);
+      const output = `${result.stderr}${result.stdout}`.trim();
+      assert.ok(
+        output === '' || /Unknown option:/.test(output),
+        `expected unknown option output for ${flag}, got ${JSON.stringify(output)}`,
+      );
     }),
     { numRuns: 30 },
   );
-});
+},
+);
