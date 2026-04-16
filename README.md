@@ -342,10 +342,12 @@ openspec update
 
 ### OpenSpec in agent sub-branches
 
-- `scripts/codex-agent.sh` enforces an OpenSpec workspace before it launches Codex in each sandbox branch/worktree.
-- `scripts/agent-branch-start.sh` can also scaffold `openspec/plan/<agent-branch-slug>/` when you set `MUSAFETY_OPENSPEC_AUTO_INIT=true`.
-- Set `MUSAFETY_OPENSPEC_AUTO_INIT=false` (default for `agent-branch-start`) to skip branch-start auto-bootstrap.
+- `scripts/codex-agent.sh` enforces OpenSpec workspaces before it launches Codex in each sandbox branch/worktree.
+- `scripts/agent-branch-start.sh` scaffolds both `openspec/changes/<agent-branch-slug>/` and `openspec/plan/<agent-branch-slug>/` by default.
+- Set `MUSAFETY_OPENSPEC_AUTO_INIT=false` only when you intentionally need to skip branch-start auto-bootstrap.
 - Set `MUSAFETY_OPENSPEC_PLAN_SLUG=<kebab-case-slug>` to force a specific plan workspace name.
+- Set `MUSAFETY_OPENSPEC_CHANGE_SLUG=<kebab-case-slug>` to force a specific change workspace name.
+- Set `MUSAFETY_OPENSPEC_CAPABILITY_SLUG=<kebab-case-slug>` to override the default capability folder used for `spec.md` scaffolding.
 
 ## Security and maintenance posture
 

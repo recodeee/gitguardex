@@ -55,8 +55,10 @@ per-branch plan workspace automatically under:
 openspec/plan/<agent-branch-slug>/
 ```
 
-For manual `scripts/agent-branch-start.sh` usage, enable auto-bootstrap with
-`MUSAFETY_OPENSPEC_AUTO_INIT=true` or scaffold manually before implementation:
+For manual `scripts/agent-branch-start.sh` usage, OpenSpec auto-bootstrap is
+enabled by default. Set `MUSAFETY_OPENSPEC_AUTO_INIT=false` only when you
+intentionally need to skip scaffold generation, or scaffold manually before
+implementation:
 
 ```bash
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
