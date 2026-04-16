@@ -12,6 +12,8 @@ AUTO_CLEANUP_RAW="${MUSAFETY_CODEX_AUTO_CLEANUP:-true}"
 AUTO_WAIT_FOR_MERGE_RAW="${MUSAFETY_CODEX_WAIT_FOR_MERGE:-true}"
 OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-true}"
 OPENSPEC_PLAN_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_PLAN_SLUG:-}"
+OPENSPEC_CHANGE_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CHANGE_SLUG:-}"
+OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CAPABILITY_SLUG:-}"
 
 normalize_bool() {
   local raw="${1:-}"
@@ -150,6 +152,27 @@ resolve_openspec_plan_slug() {
   sanitize_slug "${branch_name//\//-}" "$task_slug"
 }
 
+resolve_openspec_change_slug() {
+  local branch_name="$1"
+  local task_slug
+  task_slug="$(sanitize_slug "$TASK_NAME" "task")"
+  if [[ -n "$OPENSPEC_CHANGE_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CHANGE_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "${branch_name//\//-}" "$task_slug"
+}
+
+resolve_openspec_capability_slug() {
+  local task_slug
+  task_slug="$(sanitize_slug "$TASK_NAME" "task")"
+  if [[ -n "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "$task_slug" "general-behavior"
+}
+
 hydrate_local_helper_in_worktree() {
   local worktree="$1"
   local relative_path="$2"
@@ -177,6 +200,32 @@ hydrate_local_helper_in_worktree() {
   fi
 
   echo "[codex-agent] Hydrated local helper in sandbox: ${relative_path}"
+}
+
+resolve_local_helper_script_path() {
+  local worktree="$1"
+  local relative_path="$2"
+  local candidate=""
+
+  candidate="${worktree}/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  candidate="${repo_root}/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  candidate="${repo_root}/templates/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  return 1
 }
 
 resolve_start_base_branch() {
@@ -397,16 +446,11 @@ ensure_openspec_plan_workspace() {
     return 0
   fi
 
-  hydrate_local_helper_in_worktree "$wt" "scripts/openspec/init-plan-workspace.sh"
-
-  local openspec_script="${wt}/scripts/openspec/init-plan-workspace.sh"
-  if [[ ! -f "$openspec_script" ]]; then
+  local openspec_script
+  if ! openspec_script="$(resolve_local_helper_script_path "$wt" "scripts/openspec/init-plan-workspace.sh")"; then
     echo "[codex-agent] Missing OpenSpec init script in sandbox: ${openspec_script}" >&2
     echo "[codex-agent] Run 'gx setup --target ${repo_root}' and retry." >&2
     return 1
-  fi
-  if [[ ! -x "$openspec_script" ]]; then
-    chmod +x "$openspec_script" 2>/dev/null || true
   fi
 
   local plan_slug
@@ -414,7 +458,7 @@ ensure_openspec_plan_workspace() {
   local init_output=""
   if ! init_output="$(
     cd "$wt"
-    bash "scripts/openspec/init-plan-workspace.sh" "$plan_slug" 2>&1
+    bash "$openspec_script" "$plan_slug" 2>&1
   )"; then
     printf '%s\n' "$init_output" >&2
     echo "[codex-agent] OpenSpec workspace initialization failed for plan '${plan_slug}'." >&2
@@ -426,6 +470,37 @@ ensure_openspec_plan_workspace() {
   echo "[codex-agent] OpenSpec plan workspace: ${wt}/openspec/plan/${plan_slug}"
 }
 
+ensure_openspec_change_workspace() {
+  local wt="$1"
+  local branch="$2"
+
+  if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
+    return 0
+  fi
+
+  local openspec_script
+  if ! openspec_script="$(resolve_local_helper_script_path "$wt" "scripts/openspec/init-change-workspace.sh")"; then
+    echo "[codex-agent] Missing OpenSpec change init script in sandbox: ${openspec_script}" >&2
+    echo "[codex-agent] Run 'gx setup --target ${repo_root}' and retry." >&2
+    return 1
+  fi
+
+  local change_slug capability_slug init_output=""
+  change_slug="$(resolve_openspec_change_slug "$branch")"
+  capability_slug="$(resolve_openspec_capability_slug)"
+  if ! init_output="$(
+    cd "$wt"
+    bash "$openspec_script" "$change_slug" "$capability_slug" 2>&1
+  )"; then
+    printf '%s\n' "$init_output" >&2
+    echo "[codex-agent] OpenSpec workspace initialization failed for change '${change_slug}'." >&2
+    return 1
+  fi
+  if [[ -n "$init_output" ]]; then
+    printf '%s\n' "$init_output"
+  fi
+  echo "[codex-agent] OpenSpec change workspace: ${wt}/openspec/changes/${change_slug}"
+}
 worktree_has_changes() {
   local wt="$1"
   if ! git -C "$wt" diff --quiet -- . ":(exclude).omx/state/agent-file-locks.json"; then
@@ -653,6 +728,10 @@ fi
 worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [[ -z "$worktree_branch" || "$worktree_branch" == "HEAD" ]]; then
   echo "[codex-agent] Could not determine sandbox branch for worktree: $worktree_path" >&2
+  exit 1
+fi
+
+if ! ensure_openspec_change_workspace "$worktree_path" "$worktree_branch"; then
   exit 1
 fi
 

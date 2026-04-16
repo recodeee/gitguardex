@@ -980,7 +980,7 @@ test('setup agent-branch-start supports explicit snapshot override without codex
   assert.match(result.stdout, /Created branch: agent\/bot\/prod-snapshot-one-ship-fix(?:-\d+)?/);
 });
 
-test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles', () => {
+test('setup agent-branch-start bootstraps OpenSpec by default and supports disable toggle', () => {
   const repoDir = initRepo();
 
   let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
@@ -991,7 +991,6 @@ test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles
     'bash',
     ['scripts/agent-branch-start.sh', 'openspec-default', 'bot', 'dev'],
     repoDir,
-    { env: { MUSAFETY_OPENSPEC_AUTO_INIT: 'true' } },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const defaultBranch = extractCreatedBranch(result.stdout);
@@ -1017,6 +1016,59 @@ test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles
     fs.existsSync(path.join(disabledWorktree, 'openspec', 'plan', disabledPlanSlug, 'summary.md')),
     false,
     'OpenSpec auto-bootstrap should be skippable via MUSAFETY_OPENSPEC_AUTO_INIT=false',
+  );
+});
+
+test('agent-branch-start scaffolds OpenSpec from local helpers without copying helper scripts into legacy-base worktrees', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  result = runCmd('git', ['checkout', '-b', 'legacy-openspec-base'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd(
+    'git',
+    ['rm', 'scripts/openspec/init-plan-workspace.sh', 'scripts/openspec/init-change-workspace.sh'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['commit', '-m', 'legacy base without openspec helper scripts'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runCmd('git', ['checkout', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runCmd(
+    'bash',
+    ['scripts/agent-branch-start.sh', 'legacy-bootstrap', 'bot', 'legacy-openspec-base'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const createdWorktree = extractCreatedWorktree(result.stdout);
+  const createdPlanSlug = extractOpenSpecPlanSlug(result.stdout);
+  const createdChangeSlug = extractOpenSpecChangeSlug(result.stdout);
+  assert.equal(
+    fs.existsSync(path.join(createdWorktree, 'openspec', 'plan', createdPlanSlug, 'summary.md')),
+    true,
+    'branch start should scaffold plan workspace even when base branch lacks helper scripts',
+  );
+  assert.equal(
+    fs.existsSync(path.join(createdWorktree, 'openspec', 'changes', createdChangeSlug, 'proposal.md')),
+    true,
+    'branch start should scaffold change workspace even when base branch lacks helper scripts',
+  );
+  assert.equal(
+    fs.existsSync(path.join(createdWorktree, 'scripts', 'openspec', 'init-plan-workspace.sh')),
+    false,
+    'branch start should not copy init-plan helper into sandbox branch when missing in base',
+  );
+  assert.equal(
+    fs.existsSync(path.join(createdWorktree, 'scripts', 'openspec', 'init-change-workspace.sh')),
+    false,
+    'branch start should not copy init-change helper into sandbox branch when missing in base',
   );
 });
 

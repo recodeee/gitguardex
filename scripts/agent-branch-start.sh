@@ -6,8 +6,10 @@ AGENT_NAME="agent"
 BASE_BRANCH=""
 BASE_BRANCH_EXPLICIT=0
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
-OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-false}"
+OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-true}"
 OPENSPEC_PLAN_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_PLAN_SLUG:-}"
+OPENSPEC_CHANGE_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CHANGE_SLUG:-}"
+OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CAPABILITY_SLUG:-}"
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -109,6 +111,25 @@ resolve_openspec_plan_slug() {
   sanitize_slug "${branch_name//\//-}" "$task_slug"
 }
 
+resolve_openspec_change_slug() {
+  local branch_name="$1"
+  local task_slug="$2"
+  if [[ -n "$OPENSPEC_CHANGE_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CHANGE_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "${branch_name//\//-}" "$task_slug"
+}
+
+resolve_openspec_capability_slug() {
+  local task_slug="$1"
+  if [[ -n "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "$task_slug" "general-behavior"
+}
+
 resolve_active_codex_snapshot_name() {
   local override="${MUSAFETY_CODEX_AUTH_SNAPSHOT:-}"
   if [[ -n "$override" ]]; then
@@ -193,6 +214,33 @@ hydrate_local_helper_in_worktree() {
   echo "[agent-branch-start] Hydrated local helper in worktree: ${relative_path}"
 }
 
+resolve_local_helper_script_path() {
+  local repo="$1"
+  local worktree="$2"
+  local relative_path="$3"
+  local candidate
+
+  candidate="${worktree}/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  candidate="${repo}/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  candidate="${repo}/templates/${relative_path}"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  return 1
+}
+
 hydrate_dependency_dir_symlink_in_worktree() {
   local repo="$1"
   local worktree="$2"
@@ -218,26 +266,21 @@ initialize_openspec_plan_workspace() {
   local worktree="$2"
   local plan_slug="$3"
 
-  hydrate_local_helper_in_worktree "$repo" "$worktree" "scripts/openspec/init-plan-workspace.sh"
-
   if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
     return 0
   fi
 
-  local openspec_script="${worktree}/scripts/openspec/init-plan-workspace.sh"
-  if [[ ! -f "$openspec_script" ]]; then
+  local openspec_script
+  if ! openspec_script="$(resolve_local_helper_script_path "$repo" "$worktree" "scripts/openspec/init-plan-workspace.sh")"; then
     echo "[agent-branch-start] OpenSpec init script is missing in sandbox worktree." >&2
     echo "[agent-branch-start] Run 'gx setup --target \"$repo\"' to repair templates, then retry." >&2
     return 1
-  fi
-  if [[ ! -x "$openspec_script" ]]; then
-    chmod +x "$openspec_script" 2>/dev/null || true
   fi
 
   local init_output=""
   if ! init_output="$(
     cd "$worktree"
-    bash "scripts/openspec/init-plan-workspace.sh" "$plan_slug" 2>&1
+    bash "$openspec_script" "$plan_slug" 2>&1
   )"; then
     printf '%s\n' "$init_output" >&2
     echo "[agent-branch-start] OpenSpec workspace initialization failed for plan '${plan_slug}'." >&2
@@ -250,6 +293,38 @@ initialize_openspec_plan_workspace() {
   echo "[agent-branch-start] OpenSpec plan workspace: ${worktree}/openspec/plan/${plan_slug}"
 }
 
+initialize_openspec_change_workspace() {
+  local repo="$1"
+  local worktree="$2"
+  local change_slug="$3"
+  local capability_slug="$4"
+
+  if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
+    return 0
+  fi
+
+  local openspec_script
+  if ! openspec_script="$(resolve_local_helper_script_path "$repo" "$worktree" "scripts/openspec/init-change-workspace.sh")"; then
+    echo "[agent-branch-start] OpenSpec change init script is missing in sandbox worktree." >&2
+    echo "[agent-branch-start] Run 'gx setup --target \"$repo\"' to repair templates, then retry." >&2
+    return 1
+  fi
+
+  local init_output=""
+  if ! init_output="$(
+    cd "$worktree"
+    bash "$openspec_script" "$change_slug" "$capability_slug" 2>&1
+  )"; then
+    printf '%s\n' "$init_output" >&2
+    echo "[agent-branch-start] OpenSpec workspace initialization failed for change '${change_slug}'." >&2
+    return 1
+  fi
+
+  if [[ -n "$init_output" ]]; then
+    printf '%s\n' "$init_output"
+  fi
+  echo "[agent-branch-start] OpenSpec change workspace: ${worktree}/openspec/changes/${change_slug}"
+}
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[agent-branch-start] Not inside a git repository." >&2
   exit 1
@@ -312,6 +387,8 @@ worktree_root="${repo_root}/${WORKTREE_ROOT_REL}"
 mkdir -p "$worktree_root"
 worktree_path="${worktree_root}/${branch_name//\//__}"
 openspec_plan_slug="$(resolve_openspec_plan_slug "$branch_name" "$task_slug")"
+openspec_change_slug="$(resolve_openspec_change_slug "$branch_name" "$task_slug")"
+openspec_capability_slug="$(resolve_openspec_capability_slug "$task_slug")"
 
 if [[ -e "$worktree_path" ]]; then
   echo "[agent-branch-start] Worktree path already exists: ${worktree_path}" >&2
@@ -394,12 +471,16 @@ hydrate_local_helper_in_worktree "$repo_root" "$worktree_path" "scripts/codex-ag
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "node_modules"
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "apps/frontend/node_modules"
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "apps/backend/node_modules"
+if ! initialize_openspec_change_workspace "$repo_root" "$worktree_path" "$openspec_change_slug" "$openspec_capability_slug"; then
+  exit 1
+fi
 if ! initialize_openspec_plan_workspace "$repo_root" "$worktree_path" "$openspec_plan_slug"; then
   exit 1
 fi
 
 echo "[agent-branch-start] Created branch: ${branch_name}"
 echo "[agent-branch-start] Worktree: ${worktree_path}"
+echo "[agent-branch-start] OpenSpec change: openspec/changes/${openspec_change_slug}"
 echo "[agent-branch-start] OpenSpec plan: openspec/plan/${openspec_plan_slug}"
 echo "[agent-branch-start] Next steps:"
 echo "  cd \"${worktree_path}\""
