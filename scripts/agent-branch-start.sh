@@ -13,6 +13,7 @@ OPENSPEC_CHANGE_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CHANGE_SLUG:-}"
 OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CAPABILITY_SLUG:-}"
 PR_REF="${GUARDEX_GH_PR_REF:-}"
 GH_REPO_REF="${GUARDEX_GH_REPO:-}"
+PRINT_NAME_ONLY=0
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -55,6 +56,15 @@ while [[ $# -gt 0 ]]; do
       GH_SYNC_ON_START_RAW="false"
       shift
       ;;
+    --print-name-only)
+      PRINT_NAME_ONLY=1
+      shift
+      ;;
+    --tier)
+      # Accepted for CLAUDE.md compatibility; scaffold size is not yet wired
+      # through this script. Consume the value so callers can pass it.
+      shift 2
+      ;;
     --)
       shift
       while [[ $# -gt 0 ]]; do
@@ -65,7 +75,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -*)
       echo "[agent-branch-start] Unknown option: $1" >&2
-      echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync]" >&2
+      echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync] [--print-name-only]" >&2
       exit 1
       ;;
     *)
@@ -105,16 +115,6 @@ sanitize_slug() {
   printf '%s' "$slug"
 }
 
-sanitize_optional_slug() {
-  local raw="$1"
-  local fallback="${2:-snapshot}"
-  if [[ -z "$raw" ]]; then
-    printf ''
-    return 0
-  fi
-  sanitize_slug "$raw" "$fallback"
-}
-
 normalize_positive_int() {
   local raw="$1"
   local fallback="$2"
@@ -142,29 +142,54 @@ shorten_slug() {
   printf '%s' "$shortened"
 }
 
-checksum_slug_suffix() {
-  local raw="$1"
-  local checksum
-  checksum="$(printf '%s' "$raw" | cksum | awk '{print $1}')"
-  printf '%s' "${checksum:0:6}"
+# Collapse arbitrary agent identifiers to a clean role token: claude | codex |
+# <other-kebab>. Priority: GUARDEX_AGENT_TYPE env override, then the raw
+# AGENT_NAME (if it contains 'claude' or 'codex'), then CLAUDECODE=1 sentinel
+# (set by Claude Code CLI), else fall back to 'codex'. To get a different role
+# (integrator, executor, ...) pass it via GUARDEX_AGENT_TYPE.
+normalize_role() {
+  local raw_agent="$1"
+  local override="${GUARDEX_AGENT_TYPE:-}"
+  if [[ -n "$override" ]]; then
+    sanitize_slug "$override" "agent"
+    return 0
+  fi
+  local lowered
+  lowered="$(printf '%s' "$raw_agent" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$lowered" == *claude* ]]; then
+    printf 'claude'
+    return 0
+  fi
+  if [[ "$lowered" == *codex* ]]; then
+    printf 'codex'
+    return 0
+  fi
+  if [[ -n "${CLAUDECODE:-}" && "${CLAUDECODE}" != "0" && "${CLAUDECODE}" != "false" ]]; then
+    printf 'claude'
+    return 0
+  fi
+  printf 'codex'
+}
+
+# Timestamp the branch/worktree/openspec slug so parallel agents never collide
+# and names sort chronologically. Format: YYYY-MM-DD-HH-MM (local time).
+# Colons are illegal in git refs, so the HH:MM the user sees is stored as
+# HH-MM in the slug. Can be overridden for tests via GUARDEX_BRANCH_TIMESTAMP.
+compose_branch_timestamp() {
+  if [[ -n "${GUARDEX_BRANCH_TIMESTAMP:-}" ]]; then
+    printf '%s' "$GUARDEX_BRANCH_TIMESTAMP"
+    return 0
+  fi
+  date +%Y-%m-%d-%H-%M
 }
 
 compose_branch_descriptor() {
-  local snapshot_slug="$1"
-  local task_slug="$2"
-  local snapshot_max task_max task_part snapshot_part checksum_input checksum_part
-  snapshot_max="$(normalize_positive_int "${GUARDEX_BRANCH_SNAPSHOT_SLUG_MAX:-18}" "18")"
-  task_max="$(normalize_positive_int "${GUARDEX_BRANCH_TASK_SLUG_MAX:-36}" "36")"
+  local task_slug="$1"
+  local stamp="$2"
+  local task_max task_part
+  task_max="$(normalize_positive_int "${GUARDEX_BRANCH_TASK_SLUG_MAX:-40}" "40")"
   task_part="$(shorten_slug "$task_slug" "$task_max")"
-  if [[ -n "$snapshot_slug" ]]; then
-    snapshot_part="$(shorten_slug "$snapshot_slug" "$snapshot_max")"
-    checksum_input="${snapshot_slug}--${task_slug}"
-    checksum_part="$(checksum_slug_suffix "$checksum_input")"
-    printf '%s-%s-%s' "$snapshot_part" "$task_part" "$checksum_part"
-    return 0
-  fi
-  checksum_part="$(checksum_slug_suffix "$task_slug")"
-  printf '%s-%s' "$task_part" "$checksum_part"
+  printf '%s-%s' "$task_part" "$stamp"
 }
 
 normalize_bool() {
@@ -215,24 +240,6 @@ resolve_openspec_capability_slug() {
     return 0
   fi
   sanitize_slug "$task_slug" "general-behavior"
-}
-
-resolve_active_codex_snapshot_name() {
-  local override="${GUARDEX_CODEX_AUTH_SNAPSHOT:-}"
-  if [[ -n "$override" ]]; then
-    printf '%s' "$override"
-    return 0
-  fi
-
-  local codex_auth_bin="${GUARDEX_CODEX_AUTH_BIN:-codex-auth}"
-  if ! command -v "$codex_auth_bin" >/dev/null 2>&1; then
-    return 0
-  fi
-
-  "$codex_auth_bin" list 2>/dev/null \
-    | sed -n 's/^[[:space:]]*\*[[:space:]]\+//p' \
-    | head -n 1 \
-    | tr -d '\r' || true
 }
 
 has_local_changes() {
@@ -936,6 +943,18 @@ if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
   fi
 fi
 
+task_slug="$(sanitize_slug "$TASK_NAME" "task")"
+agent_slug="$(normalize_role "$AGENT_NAME")"
+branch_timestamp="$(compose_branch_timestamp)"
+branch_descriptor="$(compose_branch_descriptor "$task_slug" "$branch_timestamp")"
+branch_name_base="agent/${agent_slug}/${branch_descriptor}"
+
+branch_name="$branch_name_base"
+if [[ "$PRINT_NAME_ONLY" -eq 1 ]]; then
+  printf '%s\n' "$branch_name"
+  exit 0
+fi
+
 helper_branch_assist_mode=0
 if is_helper_agent_base_branch "$BASE_BRANCH"; then
   helper_branch_assist_mode=1
@@ -957,16 +976,7 @@ else
   start_ref="${BASE_BRANCH}"
 fi
 
-task_slug="$(sanitize_slug "$TASK_NAME" "task")"
-agent_slug_raw="$(sanitize_slug "$AGENT_NAME" "agent")"
-agent_slug="$(shorten_slug "$agent_slug_raw" "${GUARDEX_BRANCH_AGENT_SLUG_MAX:-24}")"
-snapshot_name="$(resolve_active_codex_snapshot_name)"
-snapshot_slug="$(sanitize_optional_slug "$snapshot_name" "snapshot")"
-branch_descriptor="$(compose_branch_descriptor "$snapshot_slug" "$task_slug")"
 timestamp="$(date +%Y%m%d-%H%M%S)"
-branch_name_base="agent/${agent_slug}/${branch_descriptor}"
-
-branch_name="$branch_name_base"
 worktree_root="${repo_root}/${WORKTREE_ROOT_REL}"
 mkdir -p "$worktree_root"
 worktree_path=""
