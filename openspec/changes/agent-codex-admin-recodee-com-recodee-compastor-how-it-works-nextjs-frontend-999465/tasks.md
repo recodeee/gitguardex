@@ -17,3 +17,9 @@
 ## Notes
 
 - `npm test` still reports an existing baseline failure in `test/metadata.test.js` (`critical runtime helper scripts stay in sync with templates`) because `scripts/codex-agent.sh` and `templates/scripts/codex-agent.sh` are already divergent in this branch baseline.
+
+## 4. Cleanup
+
+- [ ] 4.1 Run the cleanup pipeline: `bash scripts/agent-branch-finish.sh --branch agent/codex-admin-recodee-com/recodee-compastor-how-it-works-nextjs-frontend-999465 --base main --via-pr --wait-for-merge --cleanup`.
+- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
+- [ ] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) for this branch.
