@@ -1398,7 +1398,7 @@ test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles
   );
 });
 
-test('setup agent-branch-start defaults base to current branch and stores per-branch base metadata', () => {
+test('setup agent-branch-start defaults base to current branch, stores base metadata, and leaves the agent branch unpublished', () => {
   const repoDir = initRepoOnBranch('main');
   seedCommit(repoDir);
   attachOriginRemoteForBranch(repoDir, 'main');
@@ -1417,12 +1417,18 @@ test('setup agent-branch-start defaults base to current branch and stores per-br
 
   result = runCmd('bash', ['scripts/agent-branch-start.sh', 'auto-base', 'bot'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /set up to track/i);
   const agentBranch = extractCreatedBranch(result.stdout);
   const agentWorktree = extractCreatedWorktree(result.stdout);
 
   const upstream = runCmd('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], agentWorktree);
-  assert.equal(upstream.status, 0, upstream.stderr || upstream.stdout);
-  assert.equal(upstream.stdout.trim(), 'origin/main');
+  assert.notEqual(upstream.status, 0, upstream.stderr || upstream.stdout);
+
+  const upstreamRemote = runCmd('git', ['config', '--get', `branch.${agentBranch}.remote`], repoDir);
+  assert.notEqual(upstreamRemote.status, 0, upstreamRemote.stderr || upstreamRemote.stdout);
+
+  const upstreamMerge = runCmd('git', ['config', '--get', `branch.${agentBranch}.merge`], repoDir);
+  assert.notEqual(upstreamMerge.status, 0, upstreamMerge.stderr || upstreamMerge.stdout);
 
   const storedBase = runCmd('git', ['config', '--get', `branch.${agentBranch}.guardexBase`], repoDir);
   assert.equal(storedBase.status, 0, storedBase.stderr || storedBase.stdout);
@@ -2587,6 +2593,7 @@ test('codex-agent launches codex inside a fresh sandbox worktree and keeps branc
 test('codex-agent restores local branch and falls back to safe worktree start when starter script switches in-place', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
+  attachOriginRemote(repoDir);
 
   const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
   assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
@@ -2657,6 +2664,13 @@ test('codex-agent restores local branch and falls back to safe worktree start wh
     true,
     'fallback sandbox path should still scaffold OpenSpec change proposal',
   );
+
+  const fallbackUpstream = runCmd('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], launchedCwd);
+  assert.notEqual(fallbackUpstream.status, 0, fallbackUpstream.stderr || fallbackUpstream.stdout);
+
+  const fallbackBase = runCmd('git', ['config', '--get', `branch.${launchedBranch}.guardexBase`], repoDir);
+  assert.equal(fallbackBase.status, 0, fallbackBase.stderr || fallbackBase.stdout);
+  assert.equal(fallbackBase.stdout.trim(), 'dev');
 
   const currentBranch = runCmd('git', ['branch', '--show-current'], repoDir);
   assert.equal(currentBranch.status, 0, currentBranch.stderr || currentBranch.stdout);

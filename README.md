@@ -223,6 +223,7 @@ gx agents stop
 - Codex/agent sessions stay blocked on protected branches and must use `agent/*` branch + PR workflow.
 - On protected `main`, `gx doctor` auto-runs in a sandbox agent branch/worktree.
 - In-place agent branching is disabled; `scripts/agent-branch-start.sh` always creates a separate worktree to keep your visible local/base branch unchanged.
+- Fresh sandbox branches intentionally start without any git upstream; guardex records the protected base in `branch.<name>.guardexBase`, and the first `git push -u` publishes the real upstream branch.
 - `scripts/agent-branch-start.sh` hydrates `scripts/codex-agent.sh` into new sandbox worktrees when missing, so auto-finish launcher flow stays available.
 
 ## Configure protected branches

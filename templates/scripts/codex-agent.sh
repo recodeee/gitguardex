@@ -274,11 +274,13 @@ start_sandbox_fallback() {
     return 1
   fi
 
-  git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$start_ref" >/dev/null
-  git -C "$repo_root" config "branch.${branch_name}.guardexBase" "$base_branch" >/dev/null 2>&1 || true
-  if git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${base_branch}"; then
-    git -C "$worktree_path" branch --set-upstream-to="origin/${base_branch}" "$branch_name" >/dev/null 2>&1 || true
+  local worktree_add_output=""
+  if ! worktree_add_output="$(git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$start_ref" 2>&1)"; then
+    printf '%s\n' "$worktree_add_output" >&2
+    return 1
   fi
+  git -C "$repo_root" config "branch.${branch_name}.guardexBase" "$base_branch" >/dev/null 2>&1 || true
+  git -C "$worktree_path" branch --unset-upstream "$branch_name" >/dev/null 2>&1 || true
 
   printf '[agent-branch-start] Created branch: %s\n' "$branch_name"
   printf '[agent-branch-start] Worktree: %s\n' "$worktree_path"

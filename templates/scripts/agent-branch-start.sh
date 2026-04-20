@@ -474,12 +474,14 @@ if [[ -n "$current_branch" && "$current_branch" != "HEAD" ]] && is_protected_bra
   fi
 fi
 
-git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$start_ref"
-git -C "$repo_root" config "branch.${branch_name}.guardexBase" "$BASE_BRANCH" >/dev/null 2>&1 || true
-
-if git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
-  git -C "$worktree_path" branch --set-upstream-to="origin/${BASE_BRANCH}" "$branch_name" >/dev/null 2>&1 || true
+worktree_add_output=""
+if ! worktree_add_output="$(git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$start_ref" 2>&1)"; then
+  printf '%s\n' "$worktree_add_output" >&2
+  exit 1
 fi
+git -C "$repo_root" config "branch.${branch_name}.guardexBase" "$BASE_BRANCH" >/dev/null 2>&1 || true
+# Fresh agent branches should start unpublished; clear any inherited base-branch tracking.
+git -C "$worktree_path" branch --unset-upstream "$branch_name" >/dev/null 2>&1 || true
 
 if [[ -n "$auto_transfer_stash_ref" ]]; then
   if git -C "$worktree_path" stash apply "$auto_transfer_stash_ref" >/dev/null 2>&1; then
