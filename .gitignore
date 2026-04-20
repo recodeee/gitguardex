@@ -77,6 +77,7 @@ openspec/plan/*
 
 # multiagent-safety:START
 .omx/
+.omc/
 scripts/agent-branch-start.sh
 scripts/agent-branch-finish.sh
 scripts/codex-agent.sh
@@ -88,6 +89,8 @@ scripts/openspec/init-plan-workspace.sh
 scripts/openspec/init-change-workspace.sh
 .githooks/pre-commit
 .githooks/pre-push
+.githooks/post-merge
+.githooks/post-checkout
 oh-my-codex/
 .codex/skills/guardex/SKILL.md
 .codex/skills/guardex-merge-skills-to-dev/SKILL.md
