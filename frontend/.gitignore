@@ -1,1 +1,10 @@
+/node_modules
+/.next
+/out
+/build
+*.log
+*.tsbuildinfo
+.env*.local
+.DS_Store
+.codex
 .omx/
