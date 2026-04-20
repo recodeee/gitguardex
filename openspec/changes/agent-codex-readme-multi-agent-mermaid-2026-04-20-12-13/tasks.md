@@ -13,3 +13,9 @@
 - [x] 3.1 Run targeted project verification commands (`npm test` run; existing unrelated failure remains in `test/metadata.test.js` script/template parity check).
 - [x] 3.2 Run `openspec validate agent-codex-readme-multi-agent-mermaid-2026-04-20-12-13 --type change --strict`.
 - [x] 3.3 Run `openspec validate --specs`.
+
+## 4. Cleanup
+
+- [x] 4.1 Confirm diff is scoped to README diagram + matching OpenSpec artifacts.
+- [x] 4.2 Ensure all edited files are claimed for branch ownership.
+- [x] 4.3 Prepare branch for PR/merge + cleanup via `agent-branch-finish`.
