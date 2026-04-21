@@ -2168,6 +2168,8 @@ test('status --json returns cli, services, and repo summary', () => {
   assert.equal(parsed.cli.name, '@imdeadpool/guardex');
   assert.equal(typeof parsed.cli.version, 'string');
   assert.equal(Array.isArray(parsed.services), true);
+  assert.ok(parsed.services.some((service) => service.name === 'oh-my-claude-sisyphus'));
+  assert.ok(parsed.services.some((service) => service.name === 'cavemem'));
   assert.equal(parsed.repo.inGitRepo, true);
   assert.equal(typeof parsed.repo.serviceStatus, 'string');
   assert.equal(parsed.repo.scan.repoRoot, repoDir);
@@ -3830,13 +3832,13 @@ test('setup dry-run accepts explicit global install approval flags', () => {
   assert.match(result.stdout, /Dry run setup done/);
 });
 
-test('setup skips global install when OMX/OpenSpec/codex-auth are already installed', () => {
+test('setup skips global install when companion npm tools are already installed', () => {
   const repoDir = initRepo();
   const marker = path.join(repoDir, '.global-install-called');
   const fakeNpm = createFakeNpmScript(`
 if [[ "$1" == "list" ]]; then
   cat <<'JSON'
-{"dependencies":{"oh-my-codex":{"version":"1.0.0"},"@fission-ai/openspec":{"version":"1.0.0"},"@imdeadpool/codex-account-switcher":{"version":"1.0.0"}}}
+{"dependencies":{"oh-my-codex":{"version":"1.0.0"},"oh-my-claude-sisyphus":{"version":"1.0.0"},"@fission-ai/openspec":{"version":"1.0.0"},"cavemem":{"version":"1.0.0"},"@imdeadpool/codex-account-switcher":{"version":"1.0.0"}}}
 JSON
   exit 0
 fi
@@ -3883,7 +3885,7 @@ exit 1
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(fs.existsSync(marker), true, 'global install should run for missing package');
   const args = fs.readFileSync(marker, 'utf8').trim();
-  assert.equal(args, 'i -g @fission-ai/openspec @imdeadpool/codex-account-switcher');
+  assert.equal(args, 'i -g oh-my-claude-sisyphus @fission-ai/openspec cavemem @imdeadpool/codex-account-switcher');
 });
 
 test('status reports gh dependency as inactive when gh is unavailable', () => {
@@ -3904,7 +3906,7 @@ test('setup warns when gh dependency is missing', () => {
   const fakeNpm = createFakeNpmScript(`
 if [[ "$1" == "list" ]]; then
   cat <<'JSON'
-{"dependencies":{"oh-my-codex":{"version":"1.0.0"},"@fission-ai/openspec":{"version":"1.0.0"},"@imdeadpool/codex-account-switcher":{"version":"1.0.0"}}}
+{"dependencies":{"oh-my-codex":{"version":"1.0.0"},"oh-my-claude-sisyphus":{"version":"1.0.0"},"@fission-ai/openspec":{"version":"1.0.0"},"cavemem":{"version":"1.0.0"},"@imdeadpool/codex-account-switcher":{"version":"1.0.0"}}}
 JSON
   exit 0
 fi

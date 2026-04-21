@@ -46,7 +46,7 @@ flowchart LR
 - **Explicit file lock claiming** — an agent declares which files it's editing before it edits them.
 - **Deletion guard** — claimed files can't be removed by another agent.
 - **Protected-base safety** — `main`, `dev`, `master` are blocked by default; agents must go through PRs.
-- **Auto-merges agent configs into every worktree** — `oh-my-codex`, `oh-my-claude`, caveman mode, and OpenSpec all get applied automatically so every spawned agent starts tuned, not bare.
+- **Auto-merges agent configs into every worktree** — `oh-my-codex`, `oh-my-claudecode`, caveman mode, and OpenSpec all get applied automatically so every spawned agent starts tuned, not bare.
 - **Repair/doctor flow** — when drift happens (and it will), `gx doctor` gets you back to a clean state.
 - **Auto-finish** — when Codex exits a session, Guardex commits sandbox changes, syncs against the base, retries once if the base moved, and opens a PR.
 
@@ -237,7 +237,7 @@ A few things worth knowing up front:
 
 - Running `gx` with no command opens the status/health view.
 - `gx init` is just an alias for `gx setup`.
-- Setup/doctor can install missing global OMX, OpenSpec, and codex-auth — but only with explicit Y/N confirmation.
+- Setup/doctor can install missing global companion CLIs (OMC runtime, OpenSpec, cavemem, codex-auth) — but only with explicit Y/N confirmation.
 - Direct commits/pushes to protected branches are **blocked** by default. Agents must use the `agent/*` + PR flow.
 - **Exception:** VS Code Source Control commits are allowed on protected branches that exist only locally (no upstream, no remote branch).
 - On protected `main`, `gx doctor` auto-runs in a sandbox agent branch/worktree so it can't touch your real main.
@@ -255,12 +255,13 @@ git config multiagent.allowVscodeProtectedBranchWrites true
 
 ## Companion tools
 
-GitGuardex is designed to work alongside these. All optional — but if you're running many agents, you probably want them. `gx status` reports each one's state:
+GitGuardex is designed to work alongside these. All optional — but if you're running many agents, you probably want them. `gx status` reports the machine-detectable global helpers; plugin/skills-first add-ons like `caveman` and `cavekit` are documented below for manual setup.
 
 ```text
 ● oh-my-codex: active
-● oh-my-claude: active
+● oh-my-claude-sisyphus: active
 ● @fission-ai/openspec: active
+● cavemem: active
 ● @imdeadpool/codex-account-switcher: active
 ● gh: active
 ```
@@ -275,13 +276,47 @@ npm i -g oh-my-codex
 
 Repo: <https://github.com/Yeachan-Heo/oh-my-codex>
 
-### oh-my-claude — Claude Code equivalent
+### oh-my-claudecode — Claude Code equivalent
 
-Claude-side mirror of oh-my-codex. Same idea: skills, commands, and defaults loaded into every Claude Code session. Guardex merges it into worktrees alongside oh-my-codex so mixed Codex + Claude agent fleets behave consistently.
+Claude-side mirror of oh-my-codex. Same idea: skills, commands, and defaults loaded into every Claude Code session. Guardex merges it into worktrees alongside oh-my-codex so mixed Codex + Claude agent fleets behave consistently. For the npm CLI/runtime path, the published package name is `oh-my-claude-sisyphus`.
 
 ```sh
-npm i -g oh-my-claude
+npm i -g oh-my-claude-sisyphus@latest
 ```
+
+Repo: <https://github.com/Yeachan-Heo/oh-my-claudecode>
+
+### Caveman — output compression for long agent runs
+
+Ultra-compressed response mode for Claude/Codex-style agents. Useful when you want less output-token churn during long reviews, debug loops, or multi-agent sessions.
+
+```sh
+npx skills add JuliusBrussee/caveman
+```
+
+Repo: <https://github.com/JuliusBrussee/caveman>
+
+### Cavemem — local persistent memory for agents
+
+Cross-agent memory with local SQLite + MCP. Helpful when you want Codex or Claude sessions to retain compressed history across runs. `gx setup` can install the CLI; you still run the IDE wiring once per machine.
+
+```sh
+npm install -g cavemem
+cavemem install --ide codex
+cavemem status
+```
+
+Repo: <https://github.com/JuliusBrussee/cavemem>
+
+### Cavekit — spec-driven build loop
+
+Spec-driven workflow layer for building from durable specs with explicit build/check commands. The current install path also brings in its `spec`, `build`, `check`, `caveman`, and `backprop` skills.
+
+```sh
+npx skills add JuliusBrussee/cavekit
+```
+
+Repo: <https://github.com/JuliusBrussee/cavekit>
 
 ### OpenSpec — spec-driven workflows
 

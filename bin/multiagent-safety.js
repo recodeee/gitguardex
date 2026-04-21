@@ -11,10 +11,13 @@ const TOOL_NAME = 'gitguardex';
 const SHORT_TOOL_NAME = 'gx';
 const LEGACY_NAMES = ['guardex', 'multiagent-safety'];
 const OPENSPEC_PACKAGE = '@fission-ai/openspec';
+const OMC_PACKAGE = 'oh-my-claude-sisyphus';
+const CAVEMEM_PACKAGE = 'cavemem';
 const GLOBAL_TOOLCHAIN_PACKAGES = [
   'oh-my-codex',
-  'oh-my-claude',
+  OMC_PACKAGE,
   OPENSPEC_PACKAGE,
+  CAVEMEM_PACKAGE,
   '@imdeadpool/codex-account-switcher',
 ];
 const GH_BIN = process.env.GUARDEX_GH_BIN || 'gh';
@@ -4713,7 +4716,7 @@ function setup(rawArgs) {
       `[${TOOL_NAME}] ✅ Global tools installed (${(globalInstallStatus.packages || []).join(', ')}).`,
     );
   } else if (globalInstallStatus.status === 'already-installed') {
-    console.log(`[${TOOL_NAME}] ✅ OMX/OpenSpec/codex-auth npm global tools already installed. Skipping.`);
+    console.log(`[${TOOL_NAME}] ✅ Companion npm global tools already installed. Skipping.`);
   } else if (globalInstallStatus.status === 'failed') {
     console.log(
       `[${TOOL_NAME}] ⚠️ Global install failed: ${globalInstallStatus.reason}\n` +

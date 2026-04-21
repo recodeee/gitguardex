@@ -1,9 +1,9 @@
-<svg width="1600" height="1180" viewBox="0 0 1600 1180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="1600" height="1224" viewBox="0 0 1600 1224" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">GitGuardex terminal status output</title>
   <desc id="desc">A terminal screenshot style illustration showing the gx status help screen with active services, repo path, branch, commands, and doctor hint.</desc>
 
-  <rect width="1600" height="1180" fill="#101725"/>
-  <rect x="18" y="18" width="1564" height="1144" rx="16" fill="#05070C" stroke="#1E293B"/>
+  <rect width="1600" height="1224" fill="#101725"/>
+  <rect x="18" y="18" width="1564" height="1188" rx="16" fill="#05070C" stroke="#1E293B"/>
   <rect x="18" y="18" width="1564" height="42" rx="16" fill="#111827"/>
   <circle cx="52" cy="39" r="7" fill="#EF4444"/>
   <circle cx="76" cy="39" r="7" fill="#F59E0B"/>
@@ -19,26 +19,27 @@
     <text x="28" y="142">[gitguardex] CLI: @imdeadpool/guardex/7.0.10 linux-x64 node-v22.22.0</text>
     <text x="28" y="186">[gitguardex] Global services:</text>
     <text x="64" y="230">- ● oh-my-codex: active</text>
-    <text x="64" y="274">- ● oh-my-claude: active</text>
+    <text x="64" y="274">- ● oh-my-claude-sisyphus: active</text>
     <text x="64" y="318">- ● @fission-ai/openspec: active</text>
-    <text x="64" y="362">- ● @imdeadpool/codex-account-switcher: active</text>
-    <text x="64" y="406">- ● GitHub (gh): active</text>
-    <text x="28" y="450">[gitguardex] Repo safety service: ● active.</text>
-    <text x="28" y="494">[gitguardex] Repo: /home/deadpool/Documents/recodee</text>
-    <text x="28" y="538">[gitguardex] Branch: dev</text>
-    <text x="28" y="582" fill="#22D3EE">gitguardex-tools logs:</text>
+    <text x="64" y="362">- ● cavemem: active</text>
+    <text x="64" y="406">- ● @imdeadpool/codex-account-switcher: active</text>
+    <text x="64" y="450">- ● GitHub (gh): active</text>
+    <text x="28" y="494">[gitguardex] Repo safety service: ● active.</text>
+    <text x="28" y="538">[gitguardex] Repo: /home/deadpool/Documents/recodee</text>
+    <text x="28" y="582">[gitguardex] Branch: dev</text>
+    <text x="28" y="626" fill="#22D3EE">gitguardex-tools logs:</text>
 
-    <text x="52" y="640">└─ USAGE</text>
-    <text x="84" y="684">$ gx &lt;command&gt; [options]</text>
-    <text x="52" y="736">└─ COMMANDS</text>
-    <text x="84" y="780">status   Show GitGuardex CLI + service health without modifying files</text>
-    <text x="84" y="824">setup    Install, repair, and verify guardrails (flags: --repair, --install-only, --target)</text>
-    <text x="84" y="868">doctor   Repair drift + verify (auto-sandboxes on protected main)</text>
-    <text x="84" y="912">protect  Manage protected branches (list/add/remove/set/reset)</text>
-    <text x="84" y="956">sync     Sync agent branches with origin/&lt;base&gt;</text>
-    <text x="84" y="1000">finish   Commit + PR + merge completed agent branches (--all, --branch)</text>
-    <text x="84" y="1044">cleanup  Prune merged/stale agent branches and worktrees</text>
-    <text x="84" y="1088">prompt   Print AI setup checklist (--exec, --snippet)</text>
-    <text x="84" y="1132">Try 'gitguardex doctor' for one-step repair + verification.</text>
+    <text x="52" y="684">└─ USAGE</text>
+    <text x="84" y="728">$ gx &lt;command&gt; [options]</text>
+    <text x="52" y="780">└─ COMMANDS</text>
+    <text x="84" y="824">status   Show GitGuardex CLI + service health without modifying files</text>
+    <text x="84" y="868">setup    Install, repair, and verify guardrails (flags: --repair, --install-only, --target)</text>
+    <text x="84" y="912">doctor   Repair drift + verify (auto-sandboxes on protected main)</text>
+    <text x="84" y="956">protect  Manage protected branches (list/add/remove/set/reset)</text>
+    <text x="84" y="1000">sync     Sync agent branches with origin/&lt;base&gt;</text>
+    <text x="84" y="1044">finish   Commit + PR + merge completed agent branches (--all, --branch)</text>
+    <text x="84" y="1088">cleanup  Prune merged/stale agent branches and worktrees</text>
+    <text x="84" y="1132">prompt   Print AI setup checklist (--exec, --snippet)</text>
+    <text x="84" y="1176">Try 'gitguardex doctor' for one-step repair + verification.</text>
   </g>
 </svg>
