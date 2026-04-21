@@ -46,6 +46,7 @@ function loadExtensionWithMockVscode(mockVscode) {
 function createMockVscode(tempRoot) {
   const registrations = {
     providers: [],
+    treeViews: [],
   };
 
   class TreeItem {
@@ -95,6 +96,18 @@ function createMockVscode(tempRoot) {
         file: (fsPath) => ({ fsPath }),
       },
       window: {
+        createTreeView: (viewId, options) => {
+          const treeView = {
+            viewId,
+            options,
+            badge: undefined,
+            message: undefined,
+            dispose() {},
+          };
+          registrations.treeViews.push(treeView);
+          registrations.providers.push({ viewId, provider: options.treeDataProvider });
+          return treeView;
+        },
         registerTreeDataProvider: (viewId, provider) => {
           registrations.providers.push({ viewId, provider });
           return disposable();
@@ -228,6 +241,8 @@ test('active-agents extension registers a provider with getTreeItem', async () =
 
   extension.activate(context);
 
+  assert.equal(registrations.treeViews.length, 1);
+  assert.equal(registrations.treeViews[0].viewId, 'gitguardex.activeAgents');
   assert.equal(registrations.providers.length, 1);
   assert.equal(registrations.providers[0].viewId, 'gitguardex.activeAgents');
 
@@ -237,6 +252,47 @@ test('active-agents extension registers a provider with getTreeItem', async () =
   const [rootItem] = await provider.getChildren();
   assert.equal(rootItem.label, 'No active Guardex agents');
   assert.equal(provider.getTreeItem(rootItem), rootItem);
+  assert.equal(registrations.treeViews[0].badge, undefined);
+  assert.equal(registrations.treeViews[0].message, 'Start a sandbox session to populate this view.');
+
+  for (const subscription of context.subscriptions) {
+    subscription.dispose?.();
+  }
+});
+
+test('active-agents extension updates the SCM badge for live sessions', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-live-view-'));
+  const sessionPath = sessionSchema.sessionFilePathForBranch(tempRoot, 'agent/codex/live-task');
+  fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+  fs.writeFileSync(
+    sessionPath,
+    `${JSON.stringify(sessionSchema.buildSessionRecord({
+      repoRoot: tempRoot,
+      branch: 'agent/codex/live-task',
+      taskName: 'live-task',
+      agentName: 'codex',
+      worktreePath: path.join(tempRoot, '.omx', 'agent-worktrees', 'live-task'),
+      pid: process.pid,
+      cliName: 'codex',
+    }), null, 2)}\n`,
+    'utf8',
+  );
+
+  const { registrations, vscode } = createMockVscode(tempRoot);
+  vscode.workspace.findFiles = async () => [{ fsPath: sessionPath }];
+  const extension = loadExtensionWithMockVscode(vscode);
+  const context = { subscriptions: [] };
+
+  extension.activate(context);
+
+  const provider = registrations.providers[0].provider;
+  const [sessionItem] = await provider.getChildren();
+  assert.equal(sessionItem.label, 'live-task');
+  assert.deepEqual(registrations.treeViews[0].badge, {
+    value: 1,
+    tooltip: '1 active agent',
+  });
+  assert.equal(registrations.treeViews[0].message, undefined);
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();

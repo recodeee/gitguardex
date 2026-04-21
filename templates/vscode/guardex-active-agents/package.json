@@ -32,7 +32,8 @@
       "scm": [
         {
           "id": "gitguardex.activeAgents",
-          "name": "Active Agents"
+          "name": "Active Agents",
+          "visibility": "visible"
         }
       ]
     },

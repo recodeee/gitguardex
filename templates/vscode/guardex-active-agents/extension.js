@@ -51,10 +51,32 @@ class ActiveAgentsProvider {
   constructor() {
     this.onDidChangeTreeDataEmitter = new vscode.EventEmitter();
     this.onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
+    this.treeView = null;
   }
 
   getTreeItem(element) {
     return element;
+  }
+
+  attachTreeView(treeView) {
+    this.treeView = treeView;
+    this.updateViewState(0);
+  }
+
+  updateViewState(sessionCount) {
+    if (!this.treeView) {
+      return;
+    }
+
+    this.treeView.badge = sessionCount > 0
+      ? {
+          value: sessionCount,
+          tooltip: `${sessionCount} active agent${sessionCount === 1 ? '' : 's'}`,
+        }
+      : undefined;
+    this.treeView.message = sessionCount > 0
+      ? undefined
+      : 'Start a sandbox session to populate this view.';
   }
 
   refresh() {
@@ -67,13 +89,15 @@ class ActiveAgentsProvider {
     }
 
     const sessionsByRepo = await this.loadSessionsByRepo();
+    const sessionCount = [...sessionsByRepo.values()].reduce((total, sessions) => total + sessions.length, 0);
+    this.updateViewState(sessionCount);
     const repos = [...sessionsByRepo.entries()]
       .map(([repoRoot, sessions]) => ({ repoRoot, sessions }))
       .filter((entry) => entry.sessions.length > 0)
       .sort((left, right) => left.repoRoot.localeCompare(right.repoRoot));
 
     if (repos.length === 0) {
-      return [new InfoItem('No active Guardex agents', 'Start a sandbox session to populate this view.')];
+      return [new InfoItem('No active Guardex agents', 'Open or start a sandbox session.')];
     }
 
     if (repos.length === 1) {
@@ -115,12 +139,17 @@ class ActiveAgentsProvider {
 
 function activate(context) {
   const provider = new ActiveAgentsProvider();
+  const treeView = vscode.window.createTreeView('gitguardex.activeAgents', {
+    treeDataProvider: provider,
+    showCollapseAll: true,
+  });
+  provider.attachTreeView(treeView);
   const refresh = () => provider.refresh();
   const watcher = vscode.workspace.createFileSystemWatcher('**/.omx/state/active-sessions/*.json');
   const interval = setInterval(refresh, 5_000);
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('gitguardex.activeAgents', provider),
+    treeView,
     vscode.commands.registerCommand('gitguardex.activeAgents.refresh', refresh),
     vscode.commands.registerCommand('gitguardex.activeAgents.openWorktree', async (session) => {
       if (!session?.worktreePath) {
