@@ -4126,7 +4126,8 @@ test('OpenSpec plan workspace scaffold creates expected role/task structure', ()
   assert.match(plannerTasks, /## 3\. Implementation/);
   assert.match(plannerTasks, /## 4\. Checkpoints/);
   assert.match(plannerTasks, /## 5\. Collaboration/);
-  assert.match(plannerTasks, /## 6\. Completion/);
+  assert.match(plannerTasks, /## 6\. Cleanup/);
+  assert.match(plannerTasks, /gx finish --via-pr --wait-for-merge --cleanup/);
   assert.match(plannerTasks, /Claim this role's files in the shared owner branch\/worktree before editing/);
 
   const plannerPrompt = fs.readFileSync(path.join(planDir, 'planner', 'prompt.md'), 'utf8');
@@ -4156,7 +4157,7 @@ test('OpenSpec change workspace scaffold creates proposal/tasks/spec defaults', 
   assert.equal(fs.existsSync(path.join(changeDir, 'specs', capabilitySlug, 'spec.md')), true, 'spec.md missing');
 
   const tasksContent = fs.readFileSync(path.join(changeDir, 'tasks.md'), 'utf8');
-  assert.match(tasksContent, /## 4\. Completion/);
+  assert.match(tasksContent, /## 4\. Cleanup/);
   assert.match(tasksContent, /gx finish --via-pr --wait-for-merge --cleanup/);
   assert.match(tasksContent, /Record PR URL \+ final `MERGED` state in the completion handoff\./);
   assert.match(tasksContent, /Confirm sandbox cleanup/);

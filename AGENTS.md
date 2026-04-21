@@ -238,7 +238,7 @@ Use `openspec/plan/README.md` as the operational runbook and `openspec/plan/PLAN
 Default quick flow:
 1. Create/maintain `openspec/plan/<plan-slug>/`.
 2. Keep role `tasks.md` files current (`planner`, `architect`, `critic`, `executor`, `writer`, `verifier`).
-3. Keep checklist headings visible: `## 1. Spec`, `## 2. Tests`, `## 3. Implementation`, `## 4. Checkpoints`.
+3. Keep checklist headings visible: `## 1. Spec`, `## 2. Tests`, `## 3. Implementation`, `## 4. Checkpoints`, plus a final cleanup section (`## 5. Cleanup` or `## 6. Cleanup`).
 4. Update checkboxes continuously while work progresses.
 5. Execute from approved `planner/plan.md` with role ownership.
 6. Verify with evidence before archive/finish.

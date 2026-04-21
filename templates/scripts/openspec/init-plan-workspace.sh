@@ -150,9 +150,11 @@ You are the \`${role}\` lane for shared plan \`${PLAN_SLUG}\`.
 - [ ] Leave a role handoff with files changed, verification, and risks.
 - [ ] Owner records \`accept\`, \`revise\`, or \`reject\` for joined output, or marks \`N/A\` if no helper joined.
 
-## 6. Completion
+## 6. Cleanup
 
-- [ ] Keep sandbox cleanup blocked until change tasks 4.1-4.3 are complete.
+- [ ] If this role owns finish, run \`gx finish --via-pr --wait-for-merge --cleanup\` or \`bash scripts/agent-branch-finish.sh --branch <agent-branch> --base <base-branch> --via-pr --wait-for-merge --cleanup\`.
+- [ ] Record PR URL + final \`MERGED\` state in the role handoff or owner change task.
+- [ ] Confirm sandbox cleanup, or capture a \`BLOCKED:\` handoff if finish is still pending.
 "
 done
 
