@@ -107,6 +107,14 @@ function createFakeGhScript(scriptBody) {
   return { fakeBin, fakePath };
 }
 
+function createFakeDockerScript(scriptBody) {
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-fake-docker-'));
+  const fakePath = path.join(fakeBin, 'docker');
+  fs.writeFileSync(fakePath, `#!/usr/bin/env bash\nset -e\n${scriptBody}\n`, 'utf8');
+  fs.chmodSync(fakePath, 0o755);
+  return { fakeBin, fakePath };
+}
+
 function fakeReviewBotDaemonScript() {
   // Keep the fake daemon responsive to stop signals so CI runners do not sit
   // inside a 60s sleep if process-group termination falls back to parent-only.
@@ -352,6 +360,7 @@ test('setup provisions workflow files and repo config', () => {
     'scripts/agent-branch-start.sh',
     'scripts/agent-branch-finish.sh',
     'scripts/codex-agent.sh',
+    'scripts/guardex-docker-loader.sh',
     'scripts/review-bot-watch.sh',
     'scripts/agent-worktree-prune.sh',
     'scripts/agent-file-locks.py',
@@ -394,6 +403,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(packageJson.scripts['agent:protect:list'], 'gx protect list');
   assert.equal(packageJson.scripts['agent:branch:sync'], 'gx sync');
   assert.equal(packageJson.scripts['agent:branch:sync:check'], 'gx sync --check');
+  assert.equal(packageJson.scripts['agent:docker:load'], 'bash ./scripts/guardex-docker-loader.sh');
   assert.equal(packageJson.scripts['agent:safety:setup'], 'gx setup');
   assert.equal(packageJson.scripts['agent:cleanup'], 'gx cleanup');
 
@@ -426,6 +436,58 @@ test('setup provisions workflow files and repo config', () => {
 
   const secondRun = runNode(['setup', '--target', repoDir], repoDir);
   assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
+});
+
+test('setup on a fresh compose repo prints onboarding hints and installs a working docker loader', () => {
+  const repoDir = initRepoOnBranch('main');
+  fs.writeFileSync(
+    path.join(repoDir, 'compose.yaml'),
+    'services:\n  app:\n    image: alpine:3.20\n',
+    'utf8',
+  );
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Branch: main \(unborn; no commits yet\)/);
+  assert.match(result.stdout, /Fresh repo onboarding: current branch is main \(unborn; no commits yet\)\./);
+  assert.match(result.stdout, /Bootstrap commit: git add \. && git commit -m "bootstrap gitguardex"/);
+  assert.match(result.stdout, /No origin remote: finish and auto-merge flows stay local until you add one\./);
+  assert.match(result.stdout, /Docker Compose helper: detected compose\.yaml\./);
+  assert.match(result.stdout, /GUARDEX_DOCKER_SERVICE/);
+
+  const packageJson = JSON.parse(fs.readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
+  assert.equal(packageJson.scripts['agent:docker:load'], 'bash ./scripts/guardex-docker-loader.sh');
+
+  const { fakeBin } = createFakeDockerScript(
+    'if [[ "$1" == "compose" && "$2" == "version" ]]; then\n' +
+      '  exit 0\n' +
+      'fi\n' +
+      'if [[ "$1" == "compose" && "$2" == "config" && "$3" == "--services" ]]; then\n' +
+      '  printf \'%s\\n\' "app"\n' +
+      '  exit 0\n' +
+      'fi\n' +
+      'if [[ "$1" == "compose" && "$2" == "ps" && "$3" == "--status" && "$4" == "running" && "$5" == "--services" ]]; then\n' +
+      '  printf \'%s\\n\' "app"\n' +
+      '  exit 0\n' +
+      'fi\n' +
+      'if [[ "$1" == "compose" && "$2" == "exec" ]]; then\n' +
+      '  printf \'EXEC:%s\\n\' "$*"\n' +
+      '  exit 0\n' +
+      'fi\n' +
+      'echo "unexpected docker args: $*" >&2\n' +
+      'exit 1\n',
+  );
+
+  result = runCmd(
+    'bash',
+    ['scripts/guardex-docker-loader.sh', '--', 'echo', 'hello'],
+    repoDir,
+    {
+      PATH: `${fakeBin}:${process.env.PATH || ''}`,
+    },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /EXEC:compose exec -T app echo hello/);
 });
 
 test('setup and doctor explain .codex file conflicts and still write managed gitignore first', () => {

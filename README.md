@@ -168,6 +168,18 @@ gx setup --target /mainfolder
 gx setup --target /mainfolder --no-recursive
 ```
 
+### Fresh repos + Docker Compose
+
+On a brand-new repo, `gx setup` now prints the next real steps too: commit the scaffold, start the first agent branch, and add `origin` if you want finish/merge flows to leave the machine.
+
+If the repo already has `docker-compose.yml`, `docker-compose.yaml`, `compose.yml`, or `compose.yaml`, setup also points you at the bundled Docker loader:
+
+```sh
+GUARDEX_DOCKER_SERVICE=app bash scripts/guardex-docker-loader.sh -- npm test
+```
+
+When the service is already running, the loader uses `docker compose exec`; otherwise it falls back to `docker compose run --rm`.
+
 ### Protected branches
 
 ```sh
