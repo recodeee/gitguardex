@@ -5015,9 +5015,9 @@ exit 1
   assert.match(args, new RegExp(`^create$`, 'm'));
   assert.match(args, new RegExp(`^v${escapeRegexLiteral(cliVersion)}$`, 'm'));
   assert.match(args, /^--repo$\nrecodeee\/gitguardex$/m);
-  assert.match(args, /^--title$\nv7\.0\.15$/m);
+  assert.match(args, new RegExp(`^--title$\\nv${escapeRegexLiteral(cliVersion)}$`, 'm'));
   assert.match(args, /Changes since v7\.0\.12\./);
-  assert.match(args, /### v7\.0\.15/);
+  assert.match(args, new RegExp(`### v${escapeRegexLiteral(cliVersion)}`));
   assert.match(args, /### v7\.0\.14/);
   assert.match(args, /### v7\.0\.13/);
 });

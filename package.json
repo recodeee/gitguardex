@@ -1,6 +1,6 @@
 {
   "name": "@imdeadpool/guardex",
-  "version": "7.0.15",
+  "version": "7.0.16",
   "description": "GitGuardex: hardened multi-agent git guardrails for parallel agent work.",
   "license": "MIT",
   "preferGlobal": true,

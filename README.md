@@ -529,6 +529,12 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.16
+- `gx doctor` now keeps nested repo repair runs visibly progressing, and overlapping integration work stays off the protected base branch instead of trying to merge back on `main`.
+- Cleanup and finish flows are less brittle: `codex-agent` no longer waits on PRs that can never exist, and prune cleanup now walks both managed worktree roots so stale sandboxes get removed consistently.
+- Mirror-sync diagnostics are quieter: when the mirror PAT is unset, Guardex now skips the sync path instead of marking the run red, and shared `ralplan` lanes stay easier to identify during handoff/debugging.
+- Bumped `@imdeadpool/guardex` from `7.0.15` → `7.0.16` after npm rejected a republish over the already-published `7.0.15`.
+
 ### v7.0.15
 - `gx doctor` no longer blocks recursive nested protected-repo repairs on child PR merge waits; nested sandboxes now force `--no-wait-for-merge` so the parent repair loop can continue.
 - `gx setup` can now refresh managed files from protected `main` through a temporary sandbox branch/worktree, sync the managed outputs back to the visible base checkout, and prune the sandbox afterward.
