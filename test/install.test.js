@@ -407,15 +407,10 @@ test('setup provisions workflow files and repo config', () => {
 
   const gitignoreContent = fs.readFileSync(path.join(repoDir, '.gitignore'), 'utf8');
   assert.match(gitignoreContent, /# multiagent-safety:START/);
-  assert.match(gitignoreContent, /scripts\/agent-branch-start\.sh/);
-  assert.match(gitignoreContent, /scripts\/codex-agent\.sh/);
-  assert.match(gitignoreContent, /scripts\/review-bot-watch\.sh/);
-  assert.match(gitignoreContent, /scripts\/agent-file-locks\.py/);
-  assert.match(gitignoreContent, /scripts\/guardex-env\.sh/);
-  assert.match(gitignoreContent, /scripts\/openspec\/init-change-workspace\.sh/);
-  assert.match(gitignoreContent, /\.githooks\/pre-commit/);
-  assert.match(gitignoreContent, /\.githooks\/pre-push/);
-  assert.match(gitignoreContent, /\.githooks\/post-merge/);
+  assert.match(gitignoreContent, /^scripts\/\*$/m);
+  assert.match(gitignoreContent, /^\.githooks$/m);
+  assert.doesNotMatch(gitignoreContent, /^scripts\/agent-branch-start\.sh$/m);
+  assert.doesNotMatch(gitignoreContent, /^\.githooks\/pre-commit$/m);
   assert.match(gitignoreContent, /\.omx\//);
   assert.match(gitignoreContent, /\.omc\//);
   assert.match(gitignoreContent, /oh-my-codex\//);
@@ -1092,6 +1087,10 @@ exit 1
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Auto-committed doctor repairs in sandbox branch/);
   assert.match(result.stdout, /Auto-finish flow completed for sandbox branch/);
+  assert.equal(fs.existsSync(path.join(repoDir, 'AGENTS.md')), true, 'protected main checkout should regain AGENTS.md');
+  const repairedRootGitignore = fs.readFileSync(path.join(repoDir, '.gitignore'), 'utf8');
+  assert.match(repairedRootGitignore, /^scripts\/\*$/m);
+  assert.match(repairedRootGitignore, /^\.githooks$/m);
 
   const createdBranch = extractCreatedBranch(result.stdout);
   result = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${createdBranch}`], repoDir);
@@ -2360,6 +2359,8 @@ test('setup appends managed gitignore block without clobbering existing entries'
   const first = fs.readFileSync(path.join(repoDir, '.gitignore'), 'utf8');
   assert.match(first, /node_modules\//);
   assert.match(first, /# multiagent-safety:START/);
+  assert.match(first, /^scripts\/\*$/m);
+  assert.match(first, /^\.githooks$/m);
   assert.match(first, /# multiagent-safety:END/);
 
   result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
@@ -3913,19 +3914,31 @@ test('doctor repairs setup drift and confirms repo is safe', () => {
 test('doctor recurses into nested frontend repos and repairs protected-main drift', () => {
   const repoDir = initRepo();
   const frontendDir = path.join(repoDir, 'frontend');
+  const frontendGitignorePath = path.join(frontendDir, '.gitignore');
   fs.mkdirSync(frontendDir, { recursive: true });
 
   let result = runCmd('git', ['init', '-b', 'main'], frontendDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  fs.writeFileSync(path.join(frontendDir, 'package.json'), '{}\n', 'utf8');
   seedCommit(frontendDir);
 
   result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(fs.existsSync(path.join(frontendDir, 'AGENTS.md')), true, 'nested frontend should be bootstrapped by setup');
+  const initialFrontendGitignore = fs.readFileSync(frontendGitignorePath, 'utf8');
+  assert.match(initialFrontendGitignore, /^scripts\/\*$/m);
+  assert.match(initialFrontendGitignore, /^\.githooks$/m);
 
   fs.rmSync(path.join(frontendDir, 'AGENTS.md'));
   fs.rmSync(path.join(frontendDir, 'scripts', 'agent-branch-start.sh'));
   fs.rmSync(path.join(frontendDir, '.githooks', 'pre-commit'));
+  fs.writeFileSync(
+    frontendGitignorePath,
+    initialFrontendGitignore
+      .replace(/^scripts\/\*\n/m, '')
+      .replace(/^\.githooks\n/m, ''),
+    'utf8',
+  );
   fs.writeFileSync(path.join(frontendDir, '.omx', 'state', 'agent-file-locks.json'), '{broken json', 'utf8');
 
   result = runNode(['doctor', '--target', repoDir], repoDir);
@@ -3940,6 +3953,9 @@ test('doctor recurses into nested frontend repos and repairs protected-main drif
     true,
     'nested frontend sandbox starter should be restored',
   );
+  const repairedFrontendGitignore = fs.readFileSync(frontendGitignorePath, 'utf8');
+  assert.match(repairedFrontendGitignore, /^scripts\/\*$/m);
+  assert.match(repairedFrontendGitignore, /^\.githooks$/m);
   const repairedFrontendHook = fs.readFileSync(path.join(frontendDir, '.githooks', 'pre-commit'), 'utf8');
   assert.match(repairedFrontendHook, /AGENTS\.md\|\.gitignore/);
 

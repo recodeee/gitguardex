@@ -176,20 +176,8 @@ const GITIGNORE_MARKER_END = '# multiagent-safety:END';
 const MANAGED_GITIGNORE_PATHS = [
   '.omx/',
   '.omc/',
-  'scripts/agent-branch-start.sh',
-  'scripts/agent-branch-finish.sh',
-  'scripts/codex-agent.sh',
-  'scripts/review-bot-watch.sh',
-  'scripts/agent-worktree-prune.sh',
-  'scripts/agent-file-locks.py',
-  'scripts/guardex-env.sh',
-  'scripts/install-agent-git-hooks.sh',
-  'scripts/openspec/init-plan-workspace.sh',
-  'scripts/openspec/init-change-workspace.sh',
-  '.githooks/pre-commit',
-  '.githooks/pre-push',
-  '.githooks/post-merge',
-  '.githooks/post-checkout',
+  'scripts/*',
+  '.githooks',
   'oh-my-codex/',
   '.codex/skills/gitguardex/SKILL.md',
   '.codex/skills/guardex-merge-skills-to-dev/SKILL.md',
@@ -1592,7 +1580,7 @@ function finishDoctorSandboxBranch(blocked, metadata) {
 
   const finishResult = run(
     'bash',
-    [finishScript, '--branch', metadata.branch, '--via-pr', '--wait-for-merge'],
+    [finishScript, '--branch', metadata.branch, '--base', blocked.branch, '--via-pr', '--wait-for-merge'],
     { cwd: metadata.worktreePath, timeout: finishTimeoutMs },
   );
   if (isSpawnFailure(finishResult)) {
