@@ -44,7 +44,7 @@ test('README release notes include current package version', () => {
 
 test('security workflows are present and use pinned GitHub Actions SHAs', () => {
   const workflowDir = path.join(repoRoot, '.github', 'workflows');
-  const expected = ['ci.yml', 'release.yml', 'scorecard.yml', 'codeql.yml'];
+  const expected = ['ci.yml', 'release.yml', 'scorecard.yml', 'codeql.yml', 'cr.yml'];
   for (const file of expected) {
     const filePath = path.join(workflowDir, file);
     assert.equal(fs.existsSync(filePath), true, `${file} missing`);

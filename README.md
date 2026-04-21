@@ -59,6 +59,16 @@ That's it. Setup installs hooks, scripts, templates, and scaffolds OpenSpec/cave
 
 ---
 
+## What `gx` shows first
+
+Before you branch, repair, or start agents, run plain `gx`. It gives you a one-screen status view for the CLI, global helpers, repo safety service, current repo path, and active branch.
+
+![GitGuardex terminal status output](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/workflow-gx-terminal-status.svg)
+
+Use `gx setup` the first time you wire GitGuardex into a repo. It bootstraps the managed hooks, scripts, templates, and optional workspace/OpenSpec wiring. If the repo drifts later, use `gx doctor` as the repair path: it reapplies the managed safety files, verifies the setup, and on protected `main` it auto-sandboxes the repair so your visible base branch stays clean.
+
+---
+
 ## Daily workflow
 
 Per new agent task:
@@ -283,7 +293,7 @@ Validate: `https://pull.git.ci/check/<owner>/<repo>`
 
 Install: <https://github.com/apps/cr-gpt>
 
-`gx setup` installs `.github/workflows/cr.yml`. Then add `OPENAI_API_KEY` under `Settings → Secrets and variables → Actions → Variables`. After that, new and updated PRs get reviewed automatically.
+`gx setup` installs `.github/workflows/cr.yml`. Then add `OPENAI_API_KEY` under `Settings → Secrets and variables → Actions → Secrets`. After that, new and updated PRs get reviewed automatically.
 
 ---
 
