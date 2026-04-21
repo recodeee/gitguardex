@@ -118,6 +118,13 @@ interface ModeConfig {
   steps: TutorialStep[]
 }
 
+interface ModeGuide {
+  eyebrow: string
+  title: string
+  summary: string
+  highlights: string[]
+}
+
 const MODE_ORDER: ModeKey[] = ['execute', 'plan', 'merge', 'installation']
 const INSTALL_COMMAND = 'npm i -g @imdeadpool/guardex'
 const PRODUCT_LABEL = 'Recodee'
@@ -1994,6 +2001,175 @@ const TUTORIAL: Record<ModeKey, ModeConfig> = {
   },
 }
 
+const MODE_GUIDES: Record<ModeKey, ModeGuide> = {
+  execute: {
+    eyebrow: 'Live sandbox flow',
+    title: 'Watch one prompt turn into an isolated PR',
+    summary:
+      'Execute mode is the end-to-end story: inspect first, branch into a sandbox, stream visible diffs, ask for approval, then merge and prune the worktree.',
+    highlights: [
+      'Prompt, inspect, sandbox, diff, PR',
+      'Parallel Codex and Claude lanes stay separated',
+      'Approval and cleanup stay visible end to end',
+    ],
+  },
+  plan: {
+    eyebrow: 'Read-only planning loop',
+    title: 'Teach the plan before the code exists',
+    summary:
+      'Plan mode slows the workflow down on purpose. The agent can only read, map risks, and draft a persistent markdown plan until the human approves execution.',
+    highlights: [
+      'Shift+Tab locks the agent into read-only',
+      'Plans persist as markdown, not hidden context',
+      'Review and revise before any writes start',
+    ],
+  },
+  merge: {
+    eyebrow: 'Conflict recovery lane',
+    title: 'Show how GuardeX merges without trashing either branch',
+    summary:
+      'Merge mode visualizes the recovery path when two PRs collide. A dedicated merge lane appears, reads both intents, writes a semantic resolution, and proves it with tests.',
+    highlights: [
+      'Conflicts are isolated before main changes',
+      'A merge agent owns the repair branch',
+      'Tests run before the final review and merge',
+    ],
+  },
+  installation: {
+    eyebrow: 'Repo onboarding',
+    title: 'Install, audit, wire, then start safely',
+    summary:
+      'Installation mode explains the shortest safe path into the workflow: install the CLI, audit the repo, wire the guardrails, then use the start and finish commands instead of ad hoc git moves.',
+    highlights: [
+      'Doctor audits drift before setup touches files',
+      'Setup wires hooks, scripts, and agent defaults',
+      'Start and finish keep the branch lifecycle predictable',
+    ],
+  },
+}
+
+const countChangedFiles = (step: TutorialStep) =>
+  step.worktrees.reduce((total, worktree) => total + (worktree.files?.length ?? 0), 0)
+
+const DEFAULT_WATCH_COPY: Record<ModeKey, string> = {
+  execute: 'The walkthrough keeps every write inside a disposable agent lane.',
+  plan: 'Plan mode keeps the workflow explainable before execution begins.',
+  merge: 'Conflict recovery happens in a dedicated merge lane, not on the base branch.',
+  installation: 'The install path teaches the command order that keeps teams out of trouble.',
+}
+
+const getStepWatchItems = (mode: ModeKey, step: TutorialStep): string[] => {
+  const changedFiles = countChangedFiles(step)
+  const items: string[] = []
+  const hasReadonlyWorktree = step.worktrees.some((worktree) => worktree.kind === 'readonly')
+  const hasParallelWorktrees = step.worktrees.length > 1
+  const hasCommitGate = step.worktrees.some((worktree) => worktree.commitReady)
+  const openTab = step.tabs.find((tab) => tab.active) ?? step.tabs[0]
+
+  if (hasReadonlyWorktree) {
+    items.push('This lane is read-only. Write attempts stay blocked until the plan is approved.')
+  }
+
+  if (hasParallelWorktrees) {
+    items.push('Multiple sandboxes can move at once without clobbering each other.')
+  } else if (step.worktrees.length === 1) {
+    items.push('A single disposable sandbox owns the live change you are watching.')
+  }
+
+  if (changedFiles > 0) {
+    items.push(`${changedFiles} tracked file${changedFiles === 1 ? '' : 's'} pulse in Source Control as the step advances.`)
+  }
+
+  if (openTab) {
+    items.push(`The editor stays anchored on ${openTab.label} so the step remains easy to follow.`)
+  }
+
+  if (step.messages.some((message) => message.kind === 'tool')) {
+    items.push('Tool blocks narrate each transition instead of hiding the mechanics.')
+  }
+
+  if (step.messages.some((message) => message.kind === 'thinking')) {
+    items.push('Thinking bubbles expose intent before side effects land.')
+  }
+
+  if (hasCommitGate) {
+    items.push('The commit waits at the human approval gate even though the code is ready.')
+  }
+
+  if (step.showPullAnimation) {
+    items.push('The final pull-back shows the sandbox disappearing after the merge lands.')
+  }
+
+  if (items.length === 0) {
+    items.push(DEFAULT_WATCH_COPY[mode])
+  }
+
+  return items.slice(0, 3)
+}
+
+const getGuardrailCopy = (mode: ModeKey, step: TutorialStep): string => {
+  if (step.worktrees.some((worktree) => worktree.kind === 'readonly')) {
+    return 'Read-only mode is enforced at the tool layer, so the plan stays trustworthy until a human flips the workflow back to execution.'
+  }
+
+  if (step.worktrees.some((worktree) => worktree.commitReady)) {
+    return 'On-request access still pauses before commit, which keeps the operator in control of the irreversible step.'
+  }
+
+  if (step.showPullAnimation) {
+    return 'Cleanup is part of the product logic. A finished lane merges, syncs back to the base branch, and prunes the sandbox instead of leaving git debt behind.'
+  }
+
+  switch (mode) {
+    case 'execute':
+      return 'Execute mode protects the base branch by forcing writes into disposable worktrees first, so review and rollback stay cheap.'
+    case 'plan':
+      return 'Plan mode converts hidden agent intent into a concrete markdown artifact before any code or shell side effects can happen.'
+    case 'merge':
+      return 'Merge mode resolves conflicts in isolation, preserving both PR intents before the final branch ever gets touched.'
+    case 'installation':
+      return 'Installation mode teaches a fixed command sequence so teams do not half-install the guardrails and drift into unsafe manual workflows.'
+  }
+}
+
+const getTakeawayCopy = (mode: ModeKey, step: TutorialStep): string => {
+  if (mode === 'execute') {
+    if (step.showPullAnimation) {
+      return 'The happy-path promise is not just “the agent can code.” It is “the repo is clean again when the change is done.”'
+    }
+    if (step.worktrees.length > 1) {
+      return 'Parallel agents only stay safe because each lane owns a separate branch and worktree.'
+    }
+    if (step.worktrees.some((worktree) => worktree.commitReady)) {
+      return 'The operator is still the final authority at commit time, even when the agent did the implementation.'
+    }
+    if (step.worktrees.length === 1) {
+      return 'Once the sandbox exists, every visible file mutation becomes reviewable and reversible.'
+    }
+    return 'The execute demo starts by proving that GuardeX does not skip straight to writing code.'
+  }
+
+  if (mode === 'plan') {
+    if (step.worktrees.some((worktree) => worktree.kind === 'readonly')) {
+      return 'A plan is more believable when the interface proves the agent physically cannot “just start coding anyway.”'
+    }
+    return 'The planning loop keeps the future implementation aligned with an artifact the team can review, edit, and revisit later.'
+  }
+
+  if (mode === 'merge') {
+    if (step.showPullAnimation) {
+      return 'Conflict resolution is only complete after the repaired branch merges cleanly and the temporary lane disappears.'
+    }
+    return 'Good merge UX is about preserving intent, not just deleting conflict markers until git stops complaining.'
+  }
+
+  if (step.showPullAnimation) {
+    return 'The onboarding path ends where real work begins: on a clean base branch with the workflow already wired.'
+  }
+
+  return 'The install sequence matters because teams follow habits. The tutorial teaches the safe habit, not just the commands.'
+}
+
 /* ======================= ICONS ======================= */
 
 const strokeProps = {
@@ -2413,6 +2589,7 @@ export default function Home() {
   }, [])
 
   const modeData = TUTORIAL[mode]
+  const modeGuide = MODE_GUIDES[mode]
   const steps = modeData.steps
   const activeStep = steps[stepIndex]
 
@@ -2499,6 +2676,42 @@ export default function Home() {
   const statusSync = activeStep.statusSync ?? '↓ 0 ↑ 0'
   const statusErrors = activeStep.statusErrors ?? 0
   const showPull = !!activeStep.showPullAnimation
+  const progressPercent = Math.round(((stepIndex + 1) / steps.length) * 100)
+  const watchItems = getStepWatchItems(mode, activeStep)
+  const guardrailCopy = getGuardrailCopy(mode, activeStep)
+  const takeawayCopy = getTakeawayCopy(mode, activeStep)
+
+  const summaryCards = [
+    {
+      label: 'Progress',
+      value: `${stepIndex + 1}/${steps.length}`,
+      meta: `${progressPercent}% through ${modeData.label.toLowerCase()}`,
+    },
+    {
+      label: 'Lane',
+      value: activeStep.worktrees.some((worktree) => worktree.kind === 'readonly')
+        ? 'read-only'
+        : mode === 'merge'
+          ? 'merge'
+          : activeStep.worktrees.length > 0
+            ? 'live'
+            : 'standby',
+      meta:
+        activeStep.worktrees.length > 0
+          ? `${activeStep.worktrees.length} sandbox${activeStep.worktrees.length === 1 ? '' : 'es'} visible`
+          : 'base branch only',
+    },
+    {
+      label: 'Tracked files',
+      value: `${activityChangeCount}`,
+      meta: activityChangeCount > 0 ? 'surfacing in Source Control' : 'no writes yet',
+    },
+    {
+      label: 'Branch state',
+      value: statusBranch === 'dev' ? 'dev' : 'agent',
+      meta: statusBranch,
+    },
+  ]
 
   return (
     <main className="how-it-works-page">
@@ -2615,6 +2828,48 @@ export default function Home() {
         <section className="pane chat-pane" aria-label="Chat transcript">
           <div className="pane-label">chat · {PRODUCT_LABEL.toLowerCase()}</div>
 
+          <section className="tutorial-brief" aria-label={`${modeData.label} overview`}>
+            <div className="tutorial-brief-head">
+              <div className="tutorial-copy">
+                <div className="tutorial-kicker">{modeGuide.eyebrow}</div>
+                <h1 className="tutorial-title">{modeGuide.title}</h1>
+              </div>
+              <span className={`tutorial-mode-pill ${mode}`} aria-live="polite">
+                {modeData.label}
+              </span>
+            </div>
+
+            <p className="tutorial-summary">{modeGuide.summary}</p>
+
+            <div className="tutorial-progress">
+              <div className="tutorial-progress-copy">
+                <span>{activeStep.stepLabel}</span>
+                <span>{progressPercent}% complete</span>
+              </div>
+              <div className="tutorial-progress-track" aria-hidden>
+                <span style={{ width: `${progressPercent}%` }} />
+              </div>
+            </div>
+
+            <div className="tutorial-meta-grid">
+              {summaryCards.map((card) => (
+                <div className="tutorial-stat" key={card.label}>
+                  <span className="tutorial-stat-label">{card.label}</span>
+                  <strong className="tutorial-stat-value">{card.value}</strong>
+                  <span className="tutorial-stat-meta">{card.meta}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="tutorial-highlights">
+              {modeGuide.highlights.map((highlight) => (
+                <div className="tutorial-highlight" key={highlight}>
+                  {highlight}
+                </div>
+              ))}
+            </div>
+          </section>
+
           <div
             className="chat-scroll"
             key={`chat-${mode}-${stepIndex}-${animationSeed}`}
@@ -2630,9 +2885,17 @@ export default function Home() {
 
           <div className="controls">
             <div className="ctrl-top">
-              <div>
-                <span className="ctrl-step-num">{activeStep.stepLabel}</span>
-                <span className="ctrl-step-label">{activeStep.label}</span>
+              <div className="ctrl-stage">
+                <div>
+                  <span className="ctrl-step-num">{activeStep.stepLabel}</span>
+                  <span className="ctrl-step-label">{activeStep.label}</span>
+                </div>
+                <div className="ctrl-progress">
+                  <span className="ctrl-progress-copy">lesson progress</span>
+                  <div className="ctrl-progress-track" aria-hidden>
+                    <span style={{ width: `${progressPercent}%` }} />
+                  </div>
+                </div>
               </div>
               <div className="dots" aria-label="Steps">
                 {steps.map((step, i) => (
@@ -2649,6 +2912,28 @@ export default function Home() {
               </div>
             </div>
             <div className="ctrl-desc">{activeStep.description}</div>
+            <div className="ctrl-guide-grid">
+              <div className="guide-card guide-card-watch">
+                <span className="guide-eyebrow">Watch for</span>
+                <div className="guide-token-grid">
+                  {watchItems.map((item) => (
+                    <span className="guide-token" key={item}>
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="guide-card">
+                <span className="guide-eyebrow">Guardrail</span>
+                <p>{guardrailCopy}</p>
+              </div>
+
+              <div className="guide-card">
+                <span className="guide-eyebrow">Takeaway</span>
+                <p>{takeawayCopy}</p>
+              </div>
+            </div>
             <div className="ctrl-btns">
               <button
                 type="button"
