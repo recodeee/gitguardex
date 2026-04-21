@@ -642,6 +642,12 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.18
+- GitGuardex now keeps the install workflow in `gx` itself: `gx branch ...`, `gx locks ...`, `gx worktree prune`, `gx migrate`, and user-level agent-skill install now own the agent lifecycle instead of teaching pasted repo scripts as the primary surface.
+- Fresh installs switch repo hooks to tiny `gx hook run ...` shims, stop copying repo-local workflow implementations and repo-local skills, and stop injecting Guardex-managed `agent:*` package scripts into consumer repos.
+- `gx migrate` can move older repos onto the smaller CLI-owned install surface while preserving the managed AGENTS block, lock registry state, repo-local dispatch shims, and required gitignore entries.
+- Bumped the release from `7.0.17` → `7.0.18` so the shipped CLI-owned install-surface changes land on a fresh publishable npm version.
+
 ### v7.0.17
 - Restored the published npm package name to `@imdeadpool/guardex` after the `@imdeadpool/gitguardex` rename only changed the package identity locally and could not rename the existing npm registry entry.
 - README/install/tutorial/self-update surfaces now point back at `@imdeadpool/guardex` while keeping GitGuardex as the product/repo brand and `gitguardex` as the long-form command.
