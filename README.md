@@ -507,6 +507,10 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.14
+- Bumped `@imdeadpool/guardex` from `7.0.13` → `7.0.14` after npm rejected a republish over the already-published `7.0.13`.
+- No package payload changes beyond the release metadata bump; this release exists so `npm publish` can proceed with a fresh semver.
+
 ### v7.0.13
 - `gx status` and `gx setup` now present the Claude companion as `oh-my-claudecode` while still installing the published npm package `oh-my-claude-sisyphus`.
 - When that dependency is inactive or the user declines the optional install, Guardex now prints the upstream repo URL so the missing dependency is explicit instead of hidden behind the npm package name.
