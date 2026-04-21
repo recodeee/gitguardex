@@ -253,21 +253,47 @@ git config multiagent.allowVscodeProtectedBranchWrites true
 
 ## Companion tools
 
-GitGuardex is designed to work alongside these. All optional — but if you're running many agents, you probably want them.
+GitGuardex is designed to work alongside these. All optional — but if you're running many agents, you probably want them. `gx status` reports each one's state:
 
-### GitHub CLI (`gh`)
+```text
+● oh-my-codex: active
+● oh-my-claude: active
+● @fission-ai/openspec: active
+● @imdeadpool/codex-account-switcher: active
+● gh: active
+```
 
-Required for PR/merge automation. `agent-branch-finish.sh` and `codex-agent.sh` auto-finish both depend on it.
+### oh-my-codex — Codex config + skills framework
+
+Loads skills, slash commands, and session defaults into Codex. Guardex merges `oh-my-codex` into every agent worktree automatically, so every spawned agent starts with the same tuned config instead of vanilla Codex.
 
 ```sh
-# https://cli.github.com/
-gh --version
-gh auth status
+npm i -g oh-my-codex
 ```
+
+Repo: <https://github.com/Yeachan-Heo/oh-my-codex>
+
+### oh-my-claude — Claude Code equivalent
+
+Claude-side mirror of oh-my-codex. Same idea: skills, commands, and defaults loaded into every Claude Code session. Guardex merges it into worktrees alongside oh-my-codex so mixed Codex + Claude agent fleets behave consistently.
+
+```sh
+npm i -g oh-my-claude
+```
+
+### OpenSpec — spec-driven workflows
+
+Structured plan/change/apply/archive flow for agents. Prevents them from drifting off-task on long jobs. Full guide: [`docs/openspec-getting-started.md`](./docs/openspec-getting-started.md).
+
+```sh
+npm i -g @fission-ai/openspec
+```
+
+Repo: <https://github.com/Fission-AI/OpenSpec>
 
 ### codex-auth — multi-account switcher
 
-For multi-identity Codex workflows. I built this because switching accounts manually for 30 agents was impossible.
+For multi-identity Codex workflows. I built this because switching accounts manually for 30 agents was impossible. Auto-registers accounts to a dashboard on `codex login` so you can see every account and switch with one command.
 
 ```sh
 npm i -g @imdeadpool/codex-account-switcher
@@ -279,6 +305,16 @@ codex-auth current
 ```
 
 Repo: [recodeecom/codex-account-switcher-cli](https://github.com/recodeecom/codex-account-switcher-cli)
+
+### GitHub CLI (`gh`)
+
+Required for PR/merge automation. `agent-branch-finish.sh` and `codex-agent.sh` auto-finish both depend on it.
+
+```sh
+# https://cli.github.com/
+gh --version
+gh auth status
+```
 
 ### Pull app — fork auto-sync
 
@@ -296,7 +332,7 @@ Validate: `https://pull.git.ci/check/<owner>/<repo>`
 
 Install: <https://github.com/apps/cr-gpt>
 
-`gx setup` installs `.github/workflows/cr.yml`. Then add `OPENAI_API_KEY` under `Settings → Secrets and variables → Actions → Secrets`. After that, new and updated PRs get reviewed automatically.
+`gx setup` installs `.github/workflows/cr.yml`. Add `OPENAI_API_KEY` under `Settings → Secrets and variables → Actions → Secrets`. After that, new and updated PRs get reviewed automatically.
 
 ---
 
