@@ -90,6 +90,17 @@ function createFakeGhScript(scriptBody) {
   return { fakeBin, fakePath };
 }
 
+function fakeReviewBotDaemonScript() {
+  // Keep the fake daemon responsive to stop signals so CI runners do not sit
+  // inside a 60s sleep if process-group termination falls back to parent-only.
+  return (
+    '#!/usr/bin/env bash\n' +
+    'set -euo pipefail\n' +
+    'trap "exit 0" TERM INT\n' +
+    'while true; do sleep 0.2; done\n'
+  );
+}
+
 function initRepo() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-'));
   const repoDir = path.join(tempDir, 'repo');
@@ -1753,13 +1764,7 @@ test('agents command starts review+cleanup bots for the target repo and stops th
   fs.mkdirSync(scriptsDir, { recursive: true });
 
   const reviewScriptPath = path.join(scriptsDir, 'review-bot-watch.sh');
-  fs.writeFileSync(
-    reviewScriptPath,
-    '#!/usr/bin/env bash\n' +
-      'set -euo pipefail\n' +
-      'while true; do sleep 60; done\n',
-    'utf8',
-  );
+  fs.writeFileSync(reviewScriptPath, fakeReviewBotDaemonScript(), 'utf8');
   fs.chmodSync(reviewScriptPath, 0o755);
 
   const pruneScriptPath = path.join(scriptsDir, 'agent-worktree-prune.sh');
@@ -1815,13 +1820,7 @@ test('agents start reuses running review bot when only cleanup bot is missing', 
   fs.mkdirSync(scriptsDir, { recursive: true });
 
   const reviewScriptPath = path.join(scriptsDir, 'review-bot-watch.sh');
-  fs.writeFileSync(
-    reviewScriptPath,
-    '#!/usr/bin/env bash\n' +
-      'set -euo pipefail\n' +
-      'while true; do sleep 60; done\n',
-    'utf8',
-  );
+  fs.writeFileSync(reviewScriptPath, fakeReviewBotDaemonScript(), 'utf8');
   fs.chmodSync(reviewScriptPath, 0o755);
 
   const pruneScriptPath = path.join(scriptsDir, 'agent-worktree-prune.sh');
@@ -1877,13 +1876,7 @@ test('agents cleanup bot defaults to a 60-minute idle threshold', () => {
   fs.mkdirSync(scriptsDir, { recursive: true });
 
   const reviewScriptPath = path.join(scriptsDir, 'review-bot-watch.sh');
-  fs.writeFileSync(
-    reviewScriptPath,
-    '#!/usr/bin/env bash\n' +
-      'set -euo pipefail\n' +
-      'while true; do sleep 60; done\n',
-    'utf8',
-  );
+  fs.writeFileSync(reviewScriptPath, fakeReviewBotDaemonScript(), 'utf8');
   fs.chmodSync(reviewScriptPath, 0o755);
 
   const pruneScriptPath = path.join(scriptsDir, 'agent-worktree-prune.sh');
