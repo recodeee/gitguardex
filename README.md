@@ -74,59 +74,83 @@ That's it. Setup installs hooks, scripts, templates, and scaffolds OpenSpec/cave
 
 ---
 
-## AGENTS.md and CLAUDE.md behavior
+## How `AGENTS.md` and `CLAUDE.md` are handled
 
-GitGuardex does **not** clear repo-owned guidance just because it needs to install its own contract.
+> [!IMPORTANT]
+> **GitGuardex never overwrites your guidance.** Only the content between these markers is managed:
+>
+> ```text
+> <!-- multiagent-safety:START -->
+>   ... managed content ...
+> <!-- multiagent-safety:END -->
+> ```
+>
+> Everything outside that block is preserved byte-for-byte.
 
-- `AGENTS.md` is managed by marker block. `gx setup` and `gx doctor` only refresh the `<!-- multiagent-safety:START --> ... <!-- multiagent-safety:END -->` section.
-- Text before or after that marker block stays yours.
-- If `AGENTS.md` exists but has no Guardex markers yet, GitGuardex appends its contract to the end instead of replacing the file.
-- If `AGENTS.md` does not exist, GitGuardex creates it.
-- Root `CLAUDE.md` is **not** separately rewritten by setup/doctor. If your repo keeps a separate `CLAUDE.md`, GitGuardex leaves it alone. In this repo `CLAUDE.md` is a symlink to `AGENTS.md`, so Claude reads the same contract. GitGuardex also installs `.claude/commands/gitguardex.md` for Claude command guidance.
+### Behavior at a glance
+
+<div align="center">
+
+| Your repo has&hellip; | `gx setup` / `gx doctor` does&hellip; |
+| :--- | :--- |
+| `AGENTS.md` **with** markers | Refreshes **only** the managed block |
+| `AGENTS.md` **without** markers | Appends the managed block to the end |
+| No `AGENTS.md` | Creates it with the managed block |
+| A root `CLAUDE.md` | Leaves it alone |
+
+</div>
+
+> [!NOTE]
+> In this repo, `CLAUDE.md` is a symlink to `AGENTS.md`, so Claude reads the same contract. Claude-specific command guidance is installed separately at `.claude/commands/gitguardex.md`.
+
+### Decision flow
 
 ```mermaid
 flowchart TD
-    A[Existing AGENTS.md] --> B{Guardex markers already present?}
-    B -->|Yes| C[Refresh only the managed block]
-    B -->|No| D[Append managed block to the end]
-    E[No AGENTS.md yet] --> F[Create AGENTS.md with managed block]
-    C --> G[Keep repo-owned text before and after]
-    D --> G
+    Start([gx setup / gx doctor])
+    Check{AGENTS.md<br/>exists?}
+    Markers{Markers<br/>present?}
+    Create[Create AGENTS.md<br/>with managed block]
+    Refresh[Refresh the<br/>managed block]
+    Append[Append managed block<br/>to end of file]
+    Done([Repo-owned text preserved])
+
+    Start --> Check
+    Check -- No --> Create
+    Check -- Yes --> Markers
+    Markers -- Yes --> Refresh
+    Markers -- No --> Append
+    Create --> Done
+    Refresh --> Done
+    Append --> Done
+
+    classDef entry   fill:#0b76c5,stroke:#60a5fa,stroke-width:2px,color:#fff
+    classDef decide  fill:#78350f,stroke:#fbbf24,stroke-width:2px,color:#fff
+    classDef action  fill:#374151,stroke:#94a3b8,stroke-width:1.5px,color:#f1f5f9
+    classDef finish  fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#fff
+
+    class Start entry
+    class Check,Markers decide
+    class Create,Refresh,Append action
+    class Done finish
 ```
 
-Before / after:
+### What actually changes
 
-```md
-# AGENTS
+```diff
+  # AGENTS
 
-Project-specific guidance before managed block.
+  Project-specific guidance before managed block.
 
-<!-- multiagent-safety:START -->
-- old managed contract
-<!-- multiagent-safety:END -->
+  <!-- multiagent-safety:START -->
+- - old managed contract
++ - current GitGuardex-managed contract
+  <!-- multiagent-safety:END -->
 
-Trailing repo notes after managed block.
+  Trailing repo notes after managed block.
 ```
 
-```md
-# AGENTS
-
-Project-specific guidance before managed block.
-
-<!-- multiagent-safety:START -->
-- current GitGuardex-managed contract
-<!-- multiagent-safety:END -->
-
-Trailing repo notes after managed block.
-```
-
-Visual model:
-
-```text
-CLAUDE.md -> AGENTS.md
-             ├─ repo-owned text stays
-             └─ Guardex refreshes only the marker block
-```
+Only lines **inside** the marker block change. Everything above and below is preserved exactly.
 
 ---
 
