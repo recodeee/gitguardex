@@ -77,6 +77,12 @@ const DEFAULT_PROTECTED_BRANCHES = ['dev', 'main', 'master'];
 const DEFAULT_BASE_BRANCH = 'dev';
 const DEFAULT_SYNC_STRATEGY = 'rebase';
 const DEFAULT_SHADOW_CLEANUP_IDLE_MINUTES = 60;
+const COMPOSE_HINT_FILES = [
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'compose.yml',
+  'compose.yaml',
+];
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '..', 'templates');
 
@@ -84,6 +90,7 @@ const TEMPLATE_FILES = [
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
   'scripts/codex-agent.sh',
+  'scripts/guardex-docker-loader.sh',
   'scripts/review-bot-watch.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
@@ -105,6 +112,7 @@ const TEMPLATE_FILES = [
 const REQUIRED_WORKFLOW_FILES = [
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
+  'scripts/guardex-docker-loader.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
   'scripts/guardex-env.sh',
@@ -133,6 +141,7 @@ const REQUIRED_PACKAGE_SCRIPTS = {
   'agent:safety:scan': 'gx status --strict',
   'agent:safety:fix': 'gx setup --repair',
   'agent:safety:doctor': 'gx doctor',
+  'agent:docker:load': 'bash ./scripts/guardex-docker-loader.sh',
   'agent:review:watch': 'bash ./scripts/review-bot-watch.sh',
   'agent:finish': 'gx finish --all',
 };
@@ -141,6 +150,7 @@ const EXECUTABLE_RELATIVE_PATHS = new Set([
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
   'scripts/codex-agent.sh',
+  'scripts/guardex-docker-loader.sh',
   'scripts/review-bot-watch.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
@@ -2769,6 +2779,66 @@ function currentBranchName(repoRoot) {
   return branch;
 }
 
+function repoHasHeadCommit(repoRoot) {
+  return gitRun(repoRoot, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true }).status === 0;
+}
+
+function readBranchDisplayName(repoRoot) {
+  const symbolic = gitRun(repoRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD'], { allowFailure: true });
+  if (symbolic.status === 0) {
+    const branch = String(symbolic.stdout || '').trim();
+    if (!branch) {
+      return '(unknown)';
+    }
+    return repoHasHeadCommit(repoRoot) ? branch : `${branch} (unborn; no commits yet)`;
+  }
+
+  const detached = gitRun(repoRoot, ['rev-parse', '--short', 'HEAD'], { allowFailure: true });
+  if (detached.status === 0) {
+    return `(detached at ${String(detached.stdout || '').trim()})`;
+  }
+  return '(unknown)';
+}
+
+function repoHasOriginRemote(repoRoot) {
+  return gitRun(repoRoot, ['remote', 'get-url', 'origin'], { allowFailure: true }).status === 0;
+}
+
+function detectComposeHintFiles(repoRoot) {
+  return COMPOSE_HINT_FILES.filter((relativePath) => fs.existsSync(path.join(repoRoot, relativePath)));
+}
+
+function printSetupRepoHints(repoRoot, baseBranch, repoLabel = '') {
+  const branchDisplay = readBranchDisplayName(repoRoot);
+  const hasHeadCommit = repoHasHeadCommit(repoRoot);
+  const hasOrigin = repoHasOriginRemote(repoRoot);
+  const composeFiles = detectComposeHintFiles(repoRoot);
+  if (hasHeadCommit && hasOrigin && composeFiles.length === 0) {
+    return;
+  }
+
+  const label = repoLabel ? ` ${repoLabel}` : '';
+  if (!hasHeadCommit) {
+    console.log(`[${TOOL_NAME}] Fresh repo onboarding${label}: current branch is ${branchDisplay}.`);
+    console.log(`[${TOOL_NAME}] Bootstrap commit${label}: git add . && git commit -m "bootstrap gitguardex"`);
+    console.log(
+      `[${TOOL_NAME}] First agent flow${label}: ` +
+      `bash scripts/agent-branch-start.sh "<task>" "codex" -> ` +
+      `python3 scripts/agent-file-locks.py claim --branch "$(git branch --show-current)" <file...> -> ` +
+      `bash scripts/agent-branch-finish.sh --branch "$(git branch --show-current)" --base ${baseBranch} --via-pr --wait-for-merge`,
+    );
+  }
+  if (!hasOrigin) {
+    console.log(`[${TOOL_NAME}] No origin remote${label}: finish and auto-merge flows stay local until you add one.`);
+  }
+  if (composeFiles.length > 0) {
+    console.log(
+      `[${TOOL_NAME}] Docker Compose helper${label}: detected ${composeFiles.join(', ')}. ` +
+      `Set GUARDEX_DOCKER_SERVICE and run 'bash scripts/guardex-docker-loader.sh -- <command...>'.`,
+    );
+  }
+}
+
 function workingTreeIsDirty(repoRoot) {
   const result = gitRun(repoRoot, ['status', '--porcelain'], { allowFailure: true });
   if (result.status !== 0) {
@@ -4282,8 +4352,7 @@ function runFixInternal(options) {
 function runScanInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
   const guardexToggle = resolveGuardexRepoToggle(repoRoot);
-  const currentBranchResult = gitRun(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'], { allowFailure: true });
-  const branch = currentBranchResult.status === 0 ? currentBranchResult.stdout.trim() : '(unknown)';
+  const branch = readBranchDisplayName(repoRoot);
   if (!guardexToggle.enabled) {
     return {
       repoRoot,
@@ -5415,6 +5484,7 @@ function setup(rawArgs) {
     } else if (autoFinishSummary.details.length > 0) {
       console.log(`[${TOOL_NAME}] ${autoFinishSummary.details[0]}`);
     }
+    printSetupRepoHints(scanResult.repoRoot, currentBaseBranch, repoLabel);
 
     aggregateErrors += scanResult.errors;
     aggregateWarnings += scanResult.warnings;
