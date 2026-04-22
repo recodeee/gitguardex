@@ -651,6 +651,69 @@ test('setup and doctor explain .githooks file conflicts and still write managed 
   assertZeroCopyManagedGitignore(gitignoreContent);
 });
 
+test('doctor --force <managed-path> rewrites only the named managed shim', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const reviewScriptPath = path.join(repoDir, 'scripts', 'review-bot-watch.sh');
+  const workflowPath = path.join(repoDir, '.github', 'workflows', 'cr.yml');
+  fs.writeFileSync(reviewScriptPath, '#!/usr/bin/env bash\nprintf "custom review shim\\n"\n', 'utf8');
+  fs.chmodSync(reviewScriptPath, 0o755);
+  fs.writeFileSync(workflowPath, '# custom workflow\n', 'utf8');
+
+  result = runNode(
+    ['doctor', '--target', repoDir, '--force', 'scripts/review-bot-watch.sh'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Unknown option:/);
+  const managedReviewShim = fs.readFileSync(reviewScriptPath, 'utf8');
+  assert.match(managedReviewShim, /exec "\$node_bin" "\$GUARDEX_CLI_ENTRY" 'internal' 'run-shell' 'reviewBot' "\$@"/);
+  assert.match(managedReviewShim, /exec "\$cli_bin" 'internal' 'run-shell' 'reviewBot' "\$@"/);
+  assert.equal(fs.readFileSync(workflowPath, 'utf8'), '# custom workflow\n');
+  assert.match(result.stdout, /skipped-conflict\s+\.github\/workflows\/cr\.yml/);
+});
+
+test('setup --force <managed-path> rewrites the named managed template', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const workflowPath = path.join(repoDir, '.github', 'workflows', 'cr.yml');
+  const managedWorkflow = fs.readFileSync(workflowPath, 'utf8');
+  fs.writeFileSync(workflowPath, '# custom workflow\n', 'utf8');
+
+  result = runNode(
+    ['setup', '--target', repoDir, '--force', '.github/workflows/cr.yml', '--no-global-install'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Unknown option:/);
+  assert.equal(fs.readFileSync(workflowPath, 'utf8'), managedWorkflow);
+});
+
+test('setup conflict message teaches targeted and global managed --force recovery', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const dockerLoaderPath = path.join(repoDir, 'scripts', 'guardex-docker-loader.sh');
+  fs.writeFileSync(dockerLoaderPath, '#!/usr/bin/env bash\nprintf "custom docker loader\\n"\n', 'utf8');
+  fs.chmodSync(dockerLoaderPath, 0o755);
+
+  result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.notEqual(result.status, 0, 'setup should fail on non-critical managed conflicts without --force');
+
+  const combined = `${result.stdout}\n${result.stderr}`;
+  assert.match(combined, /Refusing to overwrite existing file without --force: scripts\/guardex-docker-loader\.sh/);
+  assert.match(combined, /--force scripts\/guardex-docker-loader\.sh/);
+  assert.match(combined, /--force' to rewrite all managed files/);
+});
+
 test('setup and doctor skip repo bootstrap when repo .env disables Guardex', () => {
   const repoDir = initRepo();
   fs.writeFileSync(path.join(repoDir, '.env'), 'GUARDEX_ON=0\n', 'utf8');

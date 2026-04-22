@@ -109,17 +109,19 @@ const TEMPLATE_FILES = [
   'vscode/guardex-active-agents/README.md',
 ];
 
-const LEGACY_WORKFLOW_SHIMS = [
-  'scripts/agent-branch-start.sh',
-  'scripts/agent-branch-finish.sh',
-  'scripts/agent-branch-merge.sh',
-  'scripts/codex-agent.sh',
-  'scripts/review-bot-watch.sh',
-  'scripts/agent-worktree-prune.sh',
-  'scripts/agent-file-locks.py',
-  'scripts/openspec/init-plan-workspace.sh',
-  'scripts/openspec/init-change-workspace.sh',
+const LEGACY_WORKFLOW_SHIM_SPECS = [
+  { relativePath: 'scripts/agent-branch-start.sh', kind: 'shell', command: ['branch', 'start'] },
+  { relativePath: 'scripts/agent-branch-finish.sh', kind: 'shell', command: ['branch', 'finish'] },
+  { relativePath: 'scripts/agent-branch-merge.sh', kind: 'shell', command: ['branch', 'merge'] },
+  { relativePath: 'scripts/codex-agent.sh', kind: 'shell', command: ['internal', 'run-shell', 'codexAgent'] },
+  { relativePath: 'scripts/review-bot-watch.sh', kind: 'shell', command: ['internal', 'run-shell', 'reviewBot'] },
+  { relativePath: 'scripts/agent-worktree-prune.sh', kind: 'shell', command: ['worktree', 'prune'] },
+  { relativePath: 'scripts/agent-file-locks.py', kind: 'python', command: ['locks'] },
+  { relativePath: 'scripts/openspec/init-plan-workspace.sh', kind: 'shell', command: ['internal', 'run-shell', 'planInit'] },
+  { relativePath: 'scripts/openspec/init-change-workspace.sh', kind: 'shell', command: ['internal', 'run-shell', 'changeInit'] },
 ];
+
+const LEGACY_WORKFLOW_SHIMS = LEGACY_WORKFLOW_SHIM_SPECS.map((entry) => entry.relativePath);
 
 const MANAGED_TEMPLATE_DESTINATIONS = TEMPLATE_FILES.map((entry) => toDestinationPath(entry));
 const MANAGED_TEMPLATE_SCRIPT_FILES = MANAGED_TEMPLATE_DESTINATIONS.filter((entry) =>
@@ -247,6 +249,13 @@ const OMX_SCAFFOLD_DIRECTORIES = [
 const OMX_SCAFFOLD_FILES = new Map([
   ['.omx/notepad.md', '\n\n## WORKING MEMORY\n'],
   ['.omx/project-memory.json', '{}\n'],
+]);
+const TARGETED_FORCEABLE_MANAGED_PATHS = new Set([
+  'AGENTS.md',
+  '.gitignore',
+  ...Array.from(OMX_SCAFFOLD_FILES.keys()),
+  ...REQUIRED_MANAGED_REPO_FILES,
+  ...LEGACY_WORKFLOW_SHIMS,
 ]);
 const COMMAND_TYPO_ALIASES = new Map([
   ['relaese', 'release'],
@@ -1037,6 +1046,13 @@ function renderPythonDispatchShim(commandParts) {
   );
 }
 
+function managedForceConflictMessage(relativePath) {
+  return (
+    `Refusing to overwrite existing file without --force: ${relativePath}\n` +
+    `Use '--force ${relativePath}' to rewrite only this managed file, or '--force' to rewrite all managed files.`
+  );
+}
+
 function renderManagedFile(repoRoot, relativePath, content, options = {}) {
   const destinationPath = path.join(repoRoot, relativePath);
   const destinationExists = fs.existsSync(destinationPath);
@@ -1050,7 +1066,7 @@ function renderManagedFile(repoRoot, relativePath, content, options = {}) {
       return { status: 'unchanged', file: relativePath };
     }
     if (!force && !isCriticalGuardrailPath(relativePath)) {
-      throw new Error(`Refusing to overwrite existing file without --force: ${relativePath}`);
+      throw new Error(managedForceConflictMessage(relativePath));
     }
   }
 
@@ -1098,9 +1114,7 @@ function copyTemplateFile(repoRoot, relativeTemplatePath, force, dryRun) {
       return { status: 'unchanged', file: destinationRelativePath };
     }
     if (!force && !isCriticalGuardrailPath(destinationRelativePath)) {
-      throw new Error(
-        `Refusing to overwrite existing file without --force: ${destinationRelativePath}`,
-      );
+      throw new Error(managedForceConflictMessage(destinationRelativePath));
     }
   }
 
@@ -1149,6 +1163,22 @@ function ensureTemplateFilePresent(repoRoot, relativeTemplatePath, dryRun) {
   }
 
   return { status: 'created', file: destinationRelativePath };
+}
+
+function ensureTargetedLegacyWorkflowShims(repoRoot, options) {
+  const targetedPaths = Array.isArray(options.forceManagedPaths) ? options.forceManagedPaths : [];
+  if (targetedPaths.length === 0) {
+    return [];
+  }
+
+  const operations = [];
+  for (const shim of LEGACY_WORKFLOW_SHIM_SPECS) {
+    if (!shouldForceManagedPath(options, shim.relativePath)) {
+      continue;
+    }
+    operations.push(ensureGeneratedScriptShim(repoRoot, shim, { dryRun: options.dryRun, force: true }));
+  }
+  return operations;
 }
 
 function lockFilePath(repoRoot) {
@@ -1457,8 +1487,65 @@ function requireValue(rawArgs, index, flagName) {
   return value;
 }
 
+function normalizeManagedForcePath(rawPath) {
+  if (typeof rawPath !== 'string') {
+    return null;
+  }
+  const normalized = path.posix.normalize(rawPath.replace(/\\/g, '/'));
+  if (!normalized || normalized === '.' || normalized.startsWith('../') || path.posix.isAbsolute(normalized)) {
+    return null;
+  }
+  return normalized.startsWith('./') ? normalized.slice(2) : normalized;
+}
+
+function collectForceManagedPaths(rawArgs, startIndex) {
+  const forceManagedPaths = [];
+  let nextIndex = startIndex;
+
+  while (nextIndex + 1 < rawArgs.length) {
+    const candidate = rawArgs[nextIndex + 1];
+    if (!candidate || candidate.startsWith('-')) {
+      break;
+    }
+    const normalized = normalizeManagedForcePath(candidate);
+    if (!normalized || !TARGETED_FORCEABLE_MANAGED_PATHS.has(normalized)) {
+      throw new Error(`Unknown managed path after --force: ${candidate}`);
+    }
+    forceManagedPaths.push(normalized);
+    nextIndex += 1;
+  }
+
+  return { forceManagedPaths, nextIndex };
+}
+
+function appendForceArgs(args, options) {
+  if (!options.force) {
+    return;
+  }
+  args.push('--force');
+  for (const managedPath of options.forceManagedPaths || []) {
+    args.push(managedPath);
+  }
+}
+
+function shouldForceManagedPath(options, relativePath) {
+  if (!options.force) {
+    return false;
+  }
+  const targetedPaths = Array.isArray(options.forceManagedPaths) ? options.forceManagedPaths : [];
+  if (targetedPaths.length === 0) {
+    return true;
+  }
+  const normalized = normalizeManagedForcePath(relativePath);
+  return normalized !== null && targetedPaths.includes(normalized);
+}
+
 function parseCommonArgs(rawArgs, defaults) {
   const options = { ...defaults };
+  const supportsForce = Object.prototype.hasOwnProperty.call(options, 'force');
+  if (supportsForce && !Array.isArray(options.forceManagedPaths)) {
+    options.forceManagedPaths = [];
+  }
 
   for (let index = 0; index < rawArgs.length; index += 1) {
     const arg = rawArgs[index];
@@ -1480,7 +1567,17 @@ function parseCommonArgs(rawArgs, defaults) {
       continue;
     }
     if (arg === '--force') {
+      if (!supportsForce) {
+        throw new Error(`Unknown option: ${arg}`);
+      }
       options.force = true;
+      const parsed = collectForceManagedPaths(rawArgs, index);
+      if (parsed.forceManagedPaths.length > 0) {
+        options.forceManagedPaths = Array.from(
+          new Set([...(options.forceManagedPaths || []), ...parsed.forceManagedPaths]),
+        );
+      }
+      index = parsed.nextIndex;
       continue;
     }
     if (arg === '--keep-stale-locks') {
@@ -1598,6 +1695,7 @@ function parseSetupArgs(rawArgs, defaults) {
 function parseDoctorArgs(rawArgs) {
   const doctorDefaults = {
     target: process.cwd(),
+    force: false,
     dropStaleLocks: true,
     skipAgents: false,
     skipPackageJson: false,
@@ -1746,6 +1844,7 @@ function runSetupBootstrapInternal(options) {
     target: installPayload.repoRoot,
     dryRun: options.dryRun,
     force: options.force,
+    forceManagedPaths: options.forceManagedPaths,
     dropStaleLocks: true,
     skipAgents: options.skipAgents,
     skipPackageJson: options.skipPackageJson,
@@ -1783,7 +1882,7 @@ function resolveSandboxTarget(repoRoot, worktreePath, targetPath) {
 
 function buildSandboxSetupArgs(options, sandboxTarget) {
   const args = ['setup', '--target', sandboxTarget, '--no-global-install', '--no-recursive'];
-  if (options.force) args.push('--force');
+  appendForceArgs(args, options);
   if (options.skipAgents) args.push('--skip-agents');
   if (options.skipPackageJson) args.push('--skip-package-json');
   if (options.skipGitignore) args.push('--no-gitignore');
@@ -1794,7 +1893,7 @@ function buildSandboxSetupArgs(options, sandboxTarget) {
 function buildSandboxDoctorArgs(options, sandboxTarget) {
   const args = ['doctor', '--target', sandboxTarget];
   if (options.dryRun) args.push('--dry-run');
-  if (options.force) args.push('--force');
+  appendForceArgs(args, options);
   if (options.skipAgents) args.push('--skip-agents');
   if (options.skipPackageJson) args.push('--skip-package-json');
   if (options.skipGitignore) args.push('--no-gitignore');
@@ -5154,10 +5253,24 @@ function runInstallInternal(options) {
   operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
 
   for (const templateFile of TEMPLATE_FILES) {
-    operations.push(copyTemplateFile(repoRoot, templateFile, Boolean(options.force), Boolean(options.dryRun)));
+    operations.push(
+      copyTemplateFile(
+        repoRoot,
+        templateFile,
+        shouldForceManagedPath(options, toDestinationPath(templateFile)),
+        Boolean(options.dryRun),
+      ),
+    );
   }
+  operations.push(...ensureTargetedLegacyWorkflowShims(repoRoot, options));
   for (const hookName of HOOK_NAMES) {
-    operations.push(ensureHookShim(repoRoot, hookName, options));
+    const hookRelativePath = path.posix.join('.githooks', hookName);
+    operations.push(
+      ensureHookShim(repoRoot, hookName, {
+        dryRun: options.dryRun,
+        force: shouldForceManagedPath(options, hookRelativePath),
+      }),
+    );
   }
 
   operations.push(ensureLockRegistry(repoRoot, Boolean(options.dryRun)));
@@ -5198,10 +5311,21 @@ function runFixInternal(options) {
   operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
 
   for (const templateFile of TEMPLATE_FILES) {
+    if (shouldForceManagedPath(options, toDestinationPath(templateFile))) {
+      operations.push(copyTemplateFile(repoRoot, templateFile, true, Boolean(options.dryRun)));
+      continue;
+    }
     operations.push(ensureTemplateFilePresent(repoRoot, templateFile, Boolean(options.dryRun)));
   }
+  operations.push(...ensureTargetedLegacyWorkflowShims(repoRoot, options));
   for (const hookName of HOOK_NAMES) {
-    operations.push(ensureHookShim(repoRoot, hookName, options));
+    const hookRelativePath = path.posix.join('.githooks', hookName);
+    operations.push(
+      ensureHookShim(repoRoot, hookName, {
+        dryRun: options.dryRun,
+        force: shouldForceManagedPath(options, hookRelativePath),
+      }),
+    );
   }
 
   operations.push(ensureLockRegistry(repoRoot, Boolean(options.dryRun)));
@@ -5715,6 +5839,7 @@ function doctor(rawArgs) {
         '--single-repo',
         '--target',
         repoPath,
+        ...(options.force ? ['--force', ...(options.forceManagedPaths || [])] : []),
         ...(options.dropStaleLocks ? [] : ['--keep-stale-locks']),
         ...(options.skipAgents ? ['--skip-agents'] : []),
         ...(options.skipPackageJson ? ['--skip-package-json'] : []),
