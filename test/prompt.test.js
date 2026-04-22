@@ -1,0 +1,118 @@
+const {
+  test,
+  assert,
+  fs,
+  os,
+  path,
+  cp,
+  cliPath,
+  cliVersion,
+  canSpawnChildProcesses,
+  spawnUnavailableReason,
+  createGuardexHomeDir,
+  withGuardexHome,
+  runNode,
+  runNodeWithEnv,
+  runBranchStart,
+  runBranchFinish,
+  runWorktreePrune,
+  runLockTool,
+  runInternalShell,
+  runCodexAgent,
+  runReviewBot,
+  runPlanInit,
+  runChangeInit,
+  stripAgentSessionEnv,
+  runCmd,
+  runHumanCmd,
+  assertZeroCopyManagedGitignore,
+  createFakeBin,
+  createFakeNpmScript,
+  createFakeOpenSpecScript,
+  createFakeNpxScript,
+  createFakeScorecardScript,
+  createFakeCodexAuthScript,
+  createFakeGhScript,
+  createFakeDockerScript,
+  fakeReviewBotDaemonScript,
+  initRepo,
+  initRepoOnBranch,
+  createGuardexCompanionHome,
+  configureGitIdentity,
+  seedCommit,
+  seedReleasePackageManifest,
+  commitAll,
+  attachOriginRemote,
+  attachOriginRemoteForBranch,
+  createBootstrappedRepo,
+  prepareDoctorAutoFinishReadyBranch,
+  commitFile,
+  aheadBehindCounts,
+  escapeRegexLiteral,
+  extractCreatedBranch,
+  extractCreatedWorktree,
+  extractOpenSpecPlanSlug,
+  extractOpenSpecChangeSlug,
+  expectedMasterplanPlanSlug,
+  extractHookCommands,
+  isPidAlive,
+  waitForPidExit,
+  sanitizeSlug,
+  defineSpawnSuite,
+} = require('./helpers/install-test-helpers');
+
+defineSpawnSuite('prompt integration suite', () => {
+
+test('prompt outputs AI setup instructions', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /npm i -g @imdeadpool\/guardex/);
+  assert.match(result.stdout, /GitGuardex \(gx\) setup checklist/);
+  assert.match(result.stdout, /gx setup/);
+  assert.match(result.stdout, /gx doctor/);
+  assert.match(result.stdout, /gx branch start/);
+  assert.match(result.stdout, /gx locks claim/);
+  assert.match(result.stdout, /gx finish --all/);
+  assert.match(result.stdout, /\/opsx:propose/);
+  assert.match(result.stdout, /https:\/\/github\.com\/apps\/pull/);
+  assert.match(result.stdout, /https:\/\/github\.com\/apps\/cr-gpt/);
+  assert.match(result.stdout, /OPENAI_API_KEY/);
+});
+
+
+test('prompt --exec outputs command-only checklist', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--exec'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^npm i -g @imdeadpool\/guardex/m);
+  assert.match(result.stdout, /^gh --version/m);
+  assert.match(result.stdout, /^gx setup$/m);
+  assert.match(result.stdout, /^gx doctor$/m);
+  assert.match(result.stdout, /^gx branch start "<task>" "<agent>"$/m);
+  assert.match(result.stdout, /^gx finish --all$/m);
+  assert.match(result.stdout, /^gx cleanup$/m);
+  assert.doesNotMatch(result.stdout, /GitGuardex \(gx\) setup checklist/);
+});
+
+
+test('deprecated copy-prompt alias still works and warns', () => {
+  const repoDir = initRepo();
+  const result = runNode(['copy-prompt'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /GitGuardex \(gx\) setup checklist/);
+  assert.match(result.stderr, /'copy-prompt' is deprecated/);
+  assert.match(result.stderr, /gx prompt/);
+});
+
+
+test('deprecated copy-commands alias still works and warns', () => {
+  const repoDir = initRepo();
+  const result = runNode(['copy-commands'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^npm i -g @imdeadpool\/guardex/m);
+  assert.match(result.stderr, /'copy-commands' is deprecated/);
+  assert.match(result.stderr, /gx prompt --exec/);
+});
+
+});
