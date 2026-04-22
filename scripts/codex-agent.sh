@@ -90,6 +90,13 @@ string_has_lightweight_prefix() {
   return 1
 }
 
+task_requires_full_change_workspace() {
+  local text="$1"
+  string_contains_any "$text" \
+    "cleanup evidence" "merged cleanup" "merged state" "pr url" \
+    "cleanup pipeline" "finish pipeline" "sandbox cleanup" "tasks.md"
+}
+
 derive_task_mode_from_tier() {
   case "$1" in
     T0|T1) printf 'caveman' ;;
@@ -128,8 +135,13 @@ decide_task_routing() {
     fi
     TASK_ROUTING_REASON="explicit tier override"
   elif string_has_lightweight_prefix "$task_lower"; then
-    OPENSPEC_TIER="T1"
-    TASK_ROUTING_REASON="explicit lightweight prefix"
+    if task_requires_full_change_workspace "$task_lower"; then
+      OPENSPEC_TIER="T2"
+      TASK_ROUTING_REASON="cleanup-evidence artifact wording overrides lightweight prefix"
+    else
+      OPENSPEC_TIER="T1"
+      TASK_ROUTING_REASON="explicit lightweight prefix"
+    fi
   elif string_contains_any "$task_lower" \
     "ralph" "autopilot" "ultrawork" "ultraqa" "ralplan" "deep interview" "ouroboros" \
     "migration" "refactor" "architecture" "re-architect" "cross-cutting" "multi-agent" \

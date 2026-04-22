@@ -208,6 +208,84 @@ test('codex-agent routes lightweight tasks to caveman T1 with notes-only OpenSpe
 });
 
 
+test('codex-agent keeps cleanup-evidence tasks on T2 even with a lightweight prefix', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+
+  const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+  let result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-fake-codex-cleanup-evidence-'));
+  const fakeCodexPath = path.join(fakeBin, 'codex');
+  fs.writeFileSync(
+    fakeCodexPath,
+    `#!/usr/bin/env bash\n` +
+      `pwd > "${'${GUARDEX_TEST_CODEX_CWD}'}"\n` +
+      `echo "$@" > "${'${GUARDEX_TEST_CODEX_ARGS}'}"\n` +
+      `printf '%s' "${'${GUARDEX_TASK_MODE}'}" > "${'${GUARDEX_TEST_TASK_MODE}'}"\n` +
+      `printf '%s' "${'${GUARDEX_OPENSPEC_TIER}'}" > "${'${GUARDEX_TEST_TASK_TIER}'}"\n` +
+      `printf '%s' "${'${GUARDEX_TASK_ROUTING_REASON}'}" > "${'${GUARDEX_TEST_TASK_REASON}'}"\n`,
+    'utf8',
+  );
+  fs.chmodSync(fakeCodexPath, 0o755);
+
+  const cwdMarker = path.join(repoDir, '.codex-agent-cwd-cleanup-evidence');
+  const argsMarker = path.join(repoDir, '.codex-agent-args-cleanup-evidence');
+  const modeMarker = path.join(repoDir, '.codex-agent-mode-cleanup-evidence');
+  const tierMarker = path.join(repoDir, '.codex-agent-tier-cleanup-evidence');
+  const reasonMarker = path.join(repoDir, '.codex-agent-reason-cleanup-evidence');
+  const launch = runCodexAgent(
+    ['simple: record merged cleanup evidence for task mode decider', 'planner', 'dev', '--model', 'gpt-5.4-mini'],
+    repoDir,
+    {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      GUARDEX_TEST_CODEX_CWD: cwdMarker,
+      GUARDEX_TEST_CODEX_ARGS: argsMarker,
+      GUARDEX_TEST_TASK_MODE: modeMarker,
+      GUARDEX_TEST_TASK_TIER: tierMarker,
+      GUARDEX_TEST_TASK_REASON: reasonMarker,
+    },
+  );
+  assert.equal(launch.status, 0, launch.stderr || launch.stdout);
+  assert.match(
+    launch.stdout,
+    /\[codex-agent\] Task routing: omx \/ T2 \(change workspace only\) \(cleanup-evidence artifact wording overrides lightweight prefix\)/,
+  );
+  assert.doesNotMatch(launch.stdout, /\[codex-agent\] OpenSpec plan workspace:/);
+
+  const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
+  const launchedBranch = extractCreatedBranch(launch.stdout);
+  const changeSlug = sanitizeSlug(launchedBranch, 'simple-record-merged-cleanup-evidence-for-task-mode-decider');
+  const changeDir = path.join(launchedCwd, 'openspec', 'changes', changeSlug);
+  const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
+
+  assert.doesNotMatch(launchedCwd, /masterplan/);
+  assert.match(launchedArgs, /--model gpt-5\.4-mini/);
+  assert.equal(fs.readFileSync(modeMarker, 'utf8'), 'omx');
+  assert.equal(fs.readFileSync(tierMarker, 'utf8'), 'T2');
+  assert.match(fs.readFileSync(reasonMarker, 'utf8'), /cleanup-evidence artifact wording overrides lightweight prefix/);
+  assert.equal(fs.existsSync(path.join(changeDir, '.openspec.yaml')), true, '.openspec.yaml missing');
+  assert.equal(fs.existsSync(path.join(changeDir, 'proposal.md')), true, 'proposal.md missing');
+  assert.equal(fs.existsSync(path.join(changeDir, 'tasks.md')), true, 'tasks.md missing');
+  assert.equal(
+    fs.existsSync(path.join(changeDir, 'specs', 'simple-record-merged-cleanup-evidence-for-task-mode-decider', 'spec.md')),
+    true,
+    'spec.md missing',
+  );
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'plan', changeSlug)),
+    false,
+    'cleanup-evidence T2 routing should not create a plan workspace',
+  );
+});
+
+
 test('codex-agent ignores stale repo-local starter shims and keeps the visible checkout stable', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
