@@ -7,6 +7,7 @@ const SESSION_SCHEMA_VERSION = 1;
 const LOCK_FILE_RELATIVE = path.join('.omx', 'state', 'agent-file-locks.json');
 const MAX_CHANGED_PATH_PREVIEW = 3;
 const ACTIVE_SESSIONS_FILTER_PREFIX = ACTIVE_SESSIONS_RELATIVE_DIR.split(path.sep).join('/');
+const LOCK_FILE_FILTER_PATH = LOCK_FILE_RELATIVE.split(path.sep).join('/');
 
 function toNonEmptyString(value, fallback = '') {
   const normalized = typeof value === 'string' ? value.trim() : String(value || '').trim();
@@ -150,7 +151,9 @@ function parseRepoChangeLine(repoRoot, line) {
 
   const normalizedRelativePath = relativePath.split(path.sep).join('/');
   if (
-    normalizedRelativePath === ACTIVE_SESSIONS_FILTER_PREFIX
+    normalizedRelativePath === LOCK_FILE_FILTER_PATH
+    || normalizedRelativePath.startsWith(`${LOCK_FILE_FILTER_PATH}/`)
+    || normalizedRelativePath === ACTIVE_SESSIONS_FILTER_PREFIX
     || normalizedRelativePath.startsWith(`${ACTIVE_SESSIONS_FILTER_PREFIX}/`)
   ) {
     return null;
