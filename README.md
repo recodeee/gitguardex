@@ -645,6 +645,12 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.19
+- `gx setup` and `gx doctor` now accept targeted managed-file recovery after `--force`, so `gx doctor --force scripts/review-bot-watch.sh` repairs the named managed file instead of failing on an unknown argument.
+- Managed-file conflict output now teaches both recovery forms directly: `--force <managed-path>` for one file and plain `--force` for whole-surface rewrites.
+- GitGuardex now keeps small-task routing caveman-only by default and makes working VS Code agent lanes easier to spot at a glance while keeping the CLI-owned install-surface rollout intact.
+- Bumped the release from `7.0.18` → `7.0.19` so the shipped setup/doctor recovery and UX refinements land on a fresh publishable npm version.
+
 ### v7.0.18
 - GitGuardex now keeps the install workflow in `gx` itself: `gx branch ...`, `gx locks ...`, `gx worktree prune`, `gx migrate`, and user-level agent-skill install now own the agent lifecycle instead of teaching pasted repo scripts as the primary surface.
 - Fresh installs switch repo hooks to tiny `gx hook run ...` shims, stop copying repo-local workflow implementations and repo-local skills, and stop injecting Guardex-managed `agent:*` package scripts into consumer repos.
