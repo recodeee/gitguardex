@@ -133,7 +133,7 @@ function extractMergeTargetWorktree(output) {
   return match[1].trim();
 }
 
-test('setup installs the managed merge workflow shim without package script churn', () => {
+test('setup keeps the merge workflow shim CLI-owned without package script churn', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
 
@@ -141,8 +141,7 @@ test('setup installs the managed merge workflow shim without package script chur
   assert.equal(result.status, 0, result.stderr || result.stdout);
 
   const mergeScriptPath = path.join(repoDir, 'scripts', 'agent-branch-merge.sh');
-  assert.equal(fs.existsSync(mergeScriptPath), true, 'merge script should be installed');
-  fs.accessSync(mergeScriptPath, fs.constants.X_OK);
+  assert.equal(fs.existsSync(mergeScriptPath), false, 'merge script should stay CLI-owned');
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
   assert.equal(packageJson.scripts['agent:branch:merge'], undefined);

@@ -15,9 +15,9 @@ Handoff: 2026-04-22 09:05Z codex owns `templates/vscode/guardex-active-agents/*`
 
 ## 2. Implementation
 
-- [x] 2.1 Split the `ACTIVE AGENTS` section into visible `WORKING NOW` and `THINKING` groups, preserving live session rows.
-- [x] 2.2 Surface working counts in the repo row / view badge summary and add a distinct icon for working lanes.
-- [x] 2.3 Update README guidance and focused regression tests for the new grouping behavior.
+- [x] 2.1 Expand session activity derivation to `blocked`, `working`, `idle`, `stalled`, and `dead`, using git markers, dirty worktree status, PID liveness, and worktree mtimes.
+- [x] 2.2 Group `ACTIVE AGENTS` into visible `BLOCKED`, `WORKING NOW`, `IDLE`, `STALLED`, and `DEAD` sections, with distinct ThemeIcons/tooltips and updated repo/badge summaries.
+- [x] 2.3 Update README guidance and focused regression tests for the expanded session-state behavior.
 
 ## 3. Verification
 
@@ -30,3 +30,5 @@ Handoff: 2026-04-22 09:05Z codex owns `templates/vscode/guardex-active-agents/*`
 - [ ] 4.1 Run the cleanup pipeline: `bash scripts/agent-branch-finish.sh --branch agent/codex/vscode-working-agents-groups-2026-04-22-09-05 --base main --via-pr --wait-for-merge --cleanup`.
 - [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
 - [ ] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).
+
+BLOCKED: This sandbox picked up unrelated concurrent edits in `scripts/agent-branch-finish.sh`, `scripts/agent-branch-start.sh`, `scripts/codex-agent.sh`, plus a new untracked `openspec/changes/agent-codex-nest-active-agent-changes-2026-04-22-10-53/` workspace after the session-state patch was verified. Do not run finish/cleanup until the branch owner decides whether to keep or split those additional changes.

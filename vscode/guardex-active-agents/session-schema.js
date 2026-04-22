@@ -8,6 +8,22 @@ const LOCK_FILE_RELATIVE = path.join('.omx', 'state', 'agent-file-locks.json');
 const MAX_CHANGED_PATH_PREVIEW = 3;
 const ACTIVE_SESSIONS_FILTER_PREFIX = ACTIVE_SESSIONS_RELATIVE_DIR.split(path.sep).join('/');
 const LOCK_FILE_FILTER_PATH = LOCK_FILE_RELATIVE.split(path.sep).join('/');
+const IDLE_ACTIVITY_WINDOW_MS = 2 * 60 * 1000;
+const STALLED_ACTIVITY_WINDOW_MS = 15 * 60 * 1000;
+const BLOCKING_GIT_STATES = [
+  {
+    label: 'Rebase in progress.',
+    markers: ['REBASE_HEAD', 'rebase-apply', 'rebase-merge'],
+  },
+  {
+    label: 'Merge in progress.',
+    markers: ['MERGE_HEAD'],
+  },
+  {
+    label: 'Cherry-pick in progress.',
+    markers: ['CHERRY_PICK_HEAD'],
+  },
+];
 
 function toNonEmptyString(value, fallback = '') {
   const normalized = typeof value === 'string' ? value.trim() : String(value || '').trim();
@@ -44,6 +60,10 @@ function splitOutputLines(output) {
   return output
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0);
+}
+
+function normalizeRelativePath(value) {
+  return toNonEmptyString(value).replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
 function runGitLines(worktreePath, args) {
@@ -184,37 +204,187 @@ function collectWorktreeChangedPaths(worktreePath) {
     .sort((left, right) => left.localeCompare(right));
 }
 
-function deriveSessionActivity(session) {
-  const changedPaths = collectWorktreeChangedPaths(session.worktreePath);
-  if (!changedPaths) {
+function resolveWorktreeGitDir(worktreePath) {
+  const gitPath = path.join(path.resolve(worktreePath), '.git');
+  try {
+    if (fs.statSync(gitPath).isDirectory()) {
+      return gitPath;
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  try {
+    const gitPointer = fs.readFileSync(gitPath, 'utf8');
+    const match = gitPointer.match(/^gitdir:\s*(.+)$/m);
+    if (match?.[1]) {
+      return path.resolve(worktreePath, match[1].trim());
+    }
+  } catch (_error) {
+    return null;
+  }
+
+  return null;
+}
+
+function deriveBlockingGitLabel(worktreePath) {
+  const gitDir = resolveWorktreeGitDir(worktreePath);
+  if (!gitDir) {
+    return '';
+  }
+
+  for (const blockingState of BLOCKING_GIT_STATES) {
+    if (blockingState.markers.some((marker) => fs.existsSync(path.join(gitDir, marker)))) {
+      return blockingState.label;
+    }
+  }
+
+  return '';
+}
+
+function collectWorktreeTrackedPaths(worktreePath) {
+  const trackedPaths = runGitLines(worktreePath, ['ls-files', '--cached', '--others', '--exclude-standard']);
+  if (!trackedPaths) {
+    return null;
+  }
+
+  return [...new Set(trackedPaths)]
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function deriveLatestWorktreeFileActivity(worktreePath) {
+  const trackedPaths = collectWorktreeTrackedPaths(worktreePath);
+  if (!trackedPaths) {
+    return null;
+  }
+
+  let latestMtimeMs = null;
+  for (const relativePath of trackedPaths) {
+    const absolutePath = path.join(worktreePath, relativePath);
+    try {
+      const stats = fs.statSync(absolutePath);
+      if (!stats.isFile() || !Number.isFinite(stats.mtimeMs)) {
+        continue;
+      }
+      latestMtimeMs = latestMtimeMs === null
+        ? stats.mtimeMs
+        : Math.max(latestMtimeMs, stats.mtimeMs);
+    } catch (_error) {
+      continue;
+    }
+  }
+
+  return latestMtimeMs;
+}
+
+function deriveSessionActivity(session, options = {}) {
+  const now = Number.isFinite(options.now) ? options.now : Date.now();
+  const blockingLabel = deriveBlockingGitLabel(session.worktreePath);
+  if (blockingLabel) {
     return {
-      activityKind: 'thinking',
-      activityLabel: 'thinking',
+      activityKind: 'blocked',
+      activityLabel: 'blocked',
+      activityCountLabel: '',
+      activitySummary: blockingLabel,
+      changeCount: 0,
+      changedPaths: [],
+      pidAlive: isPidAlive(session.pid),
+      lastFileActivityAt: '',
+      lastFileActivityLabel: '',
+    };
+  }
+
+  const pidAlive = isPidAlive(session.pid);
+  if (!pidAlive) {
+    return {
+      activityKind: 'dead',
+      activityLabel: 'dead',
+      activityCountLabel: '',
+      activitySummary: 'Recorded PID is not alive.',
+      changeCount: 0,
+      changedPaths: [],
+      pidAlive,
+      lastFileActivityAt: '',
+      lastFileActivityLabel: '',
+    };
+  }
+
+  const worktreeChangedPaths = collectWorktreeChangedPaths(session.worktreePath);
+  if (!worktreeChangedPaths) {
+    return {
+      activityKind: 'idle',
+      activityLabel: 'idle',
       activityCountLabel: '',
       activitySummary: 'Worktree activity unavailable.',
       changeCount: 0,
       changedPaths: [],
+      pidAlive,
+      lastFileActivityAt: '',
+      lastFileActivityLabel: '',
     };
   }
 
-  if (changedPaths.length === 0) {
+  if (worktreeChangedPaths.length > 0) {
+    const changedPaths = [...new Set(worktreeChangedPaths
+      .map((relativePath) => normalizeRelativePath(
+        path.relative(session.repoRoot, path.resolve(session.worktreePath, relativePath)),
+      ))
+      .filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+
     return {
-      activityKind: 'thinking',
-      activityLabel: 'thinking',
+      activityKind: 'working',
+      activityLabel: 'working',
+      activityCountLabel: formatFileCount(worktreeChangedPaths.length),
+      activitySummary: previewChangedPaths(worktreeChangedPaths),
+      changeCount: worktreeChangedPaths.length,
+      changedPaths,
+      pidAlive,
+      lastFileActivityAt: '',
+      lastFileActivityLabel: '',
+    };
+  }
+
+  const latestFileActivityMs = deriveLatestWorktreeFileActivity(session.worktreePath);
+  const lastFileActivityAt = Number.isFinite(latestFileActivityMs)
+    ? new Date(latestFileActivityMs).toISOString()
+    : '';
+  const lastFileActivityLabel = lastFileActivityAt
+    ? formatElapsedFrom(lastFileActivityAt, now)
+    : '';
+  const lastFileActivityAgeMs = Number.isFinite(latestFileActivityMs)
+    ? Math.max(0, now - latestFileActivityMs)
+    : null;
+
+  if (lastFileActivityAgeMs !== null && lastFileActivityAgeMs > STALLED_ACTIVITY_WINDOW_MS) {
+    return {
+      activityKind: 'stalled',
+      activityLabel: 'stalled',
       activityCountLabel: '',
-      activitySummary: 'Worktree clean.',
+      activitySummary: `Worktree clean. No file activity for ${lastFileActivityLabel}.`,
       changeCount: 0,
       changedPaths: [],
+      pidAlive,
+      lastFileActivityAt,
+      lastFileActivityLabel,
     };
   }
 
   return {
-    activityKind: 'working',
-    activityLabel: 'working',
-    activityCountLabel: formatFileCount(changedPaths.length),
-    activitySummary: previewChangedPaths(changedPaths),
-    changeCount: changedPaths.length,
-    changedPaths,
+    activityKind: 'idle',
+    activityLabel: 'idle',
+    activityCountLabel: '',
+    activitySummary: lastFileActivityAgeMs !== null && lastFileActivityAgeMs <= IDLE_ACTIVITY_WINDOW_MS
+      ? `Worktree clean. Recent file activity ${lastFileActivityLabel} ago.`
+      : lastFileActivityLabel
+        ? `Worktree clean. Last file activity ${lastFileActivityLabel} ago.`
+        : 'Worktree clean.',
+    changeCount: 0,
+    changedPaths: [],
+    pidAlive,
+    lastFileActivityAt,
+    lastFileActivityLabel,
   };
 }
 
@@ -289,6 +459,7 @@ function normalizeSessionRecord(input, options = {}) {
     startedAt: startedAt.toISOString(),
     filePath: toNonEmptyString(options.filePath),
     label: deriveSessionLabel(branch, worktreePath),
+    changedPaths: [],
   };
 }
 
@@ -360,7 +531,7 @@ function readActiveSessions(repoRoot, options = {}) {
     }
 
     normalized.elapsedLabel = formatElapsedFrom(normalized.startedAt, now);
-    Object.assign(normalized, deriveSessionActivity(normalized));
+    Object.assign(normalized, deriveSessionActivity(normalized, { now }));
     sessions.push(normalized);
   }
 
@@ -393,6 +564,9 @@ module.exports = {
   activeSessionsDirForRepo,
   buildSessionRecord,
   collectWorktreeChangedPaths,
+  collectWorktreeTrackedPaths,
+  deriveBlockingGitLabel,
+  deriveLatestWorktreeFileActivity,
   deriveSessionLabel,
   deriveSessionActivity,
   formatElapsedFrom,
@@ -404,6 +578,7 @@ module.exports = {
   readActiveSessions,
   readRepoChanges,
   deriveRepoChangeStatus,
+  resolveWorktreeGitDir,
   sanitizeBranchForFile,
   sessionFileNameForBranch,
   sessionFilePathForBranch,
