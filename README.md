@@ -27,6 +27,20 @@
   <a href="#commands">Commands</a>
 </p>
 
+
+<h3 align="center">Install in one line</h3>
+
+```bash
+npm i -g @imdeadpool/guardex
+```
+
+<p align="center">
+  <sub>
+    Then <code>cd</code> into your repo and run <code>gx setup</code> — hook shims, repo state,
+    and OMX&nbsp;/&nbsp;OpenSpec&nbsp;/&nbsp;caveman wiring all scaffold in one go.
+  </sub>
+</p>
+
 Canonical copy: [about_description.txt](./about_description.txt)
 
 <p align="center">
@@ -63,25 +77,6 @@ GitGuardex exists to stop that loop. Every agent gets its own worktree, claims t
 
 <p align="center">
   <img alt="Install GitGuardex" src="https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/install-hero.svg" width="680">
-</p>
-
-<h3 align="center">Install in one line</h3>
-
-```bash
-npm i -g @imdeadpool/guardex
-```
-
-<p align="center">
-  <sub>
-    Then <code>cd</code> into your repo and run <code>gx setup</code> — hook shims, repo state,
-    and OMX&nbsp;/&nbsp;OpenSpec&nbsp;/&nbsp;caveman wiring all scaffold in one go.
-  </sub>
-</p>
-
-<p align="center">
-  <a href="https://www.npmjs.com/package/@imdeadpool/guardex"><img alt="npm" src="https://img.shields.io/npm/v/%40imdeadpool%2Fguardex?label=latest&style=flat-square&color=cb3837&logo=npm&logoColor=white"></a>
-  <a href="https://www.npmjs.com/package/@imdeadpool/guardex"><img alt="downloads" src="https://img.shields.io/npm/dm/%40imdeadpool%2Fguardex?label=downloads&style=flat-square&color=0b76c5"></a>
-  <a href="https://github.com/recodeee/gitguardex/stargazers"><img alt="stars" src="https://img.shields.io/github/stars/recodeee/gitguardex?style=flat-square&color=d4ac0d"></a>
 </p>
 
 ### Dashboard
