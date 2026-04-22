@@ -27,5 +27,7 @@
 ## 5. Cleanup
 
 - [x] 5.1 Reconcile the shipped README/install docs with the zero-copy repo footprint and note any intentional compatibility leftovers. README now documents the hook-only install footprint and notes that `gx migrate` removes leftover workflow shims while the CLI still honors repo-local `scripts/review-bot-watch.sh` / `scripts/codex-agent.sh` during migration.
-- [ ] 5.2 Finish the agent branch via PR merge + cleanup (`gx finish --via-pr --wait-for-merge --cleanup` or `bash scripts/agent-branch-finish.sh --branch <agent-branch> --base <base-branch> --via-pr --wait-for-merge --cleanup`).
-- [ ] 5.3 Record PR URL + final `MERGED` evidence in the completion handoff.
+- [x] 5.2 Finish the agent branch via PR merge + cleanup (`gx finish --via-pr --wait-for-merge --cleanup` or `bash scripts/agent-branch-finish.sh --branch <agent-branch> --base <base-branch> --via-pr --wait-for-merge --cleanup`).
+- [x] 5.3 Record PR URL + final `MERGED` evidence in the completion handoff.
+
+Completion note: PR #271 (`https://github.com/recodeee/gitguardex/pull/271`) reached `MERGED` at `2026-04-22T07:16:58Z` with merge commit `7c5bd067ec2376464b82caf20dadf04938448a82` (`7c5bd06`). In the nested `gitguardex` repo, `git branch -a --list '*zero-copy-cli-install-surface-2026-04-22-01-28*'` returns no remaining source branch, and `git worktree list` shows no leftover zero-copy task worktree.
