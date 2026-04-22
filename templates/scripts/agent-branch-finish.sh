@@ -455,6 +455,44 @@ read_pr_state() {
   return 0
 }
 
+read_merged_pr_for_head() {
+  local head_sha="${1:-}"
+  local state_line=""
+  local parsed_state=""
+  local parsed_merged_at=""
+  local parsed_url=""
+
+  if [[ -z "$head_sha" ]]; then
+    return 1
+  fi
+
+  state_line="$("$GH_BIN" pr list \
+    --state merged \
+    --head "$SOURCE_BRANCH" \
+    --base "$BASE_BRANCH" \
+    --json state,mergedAt,url,headRefOid \
+    --jq "map(select(.headRefOid == \"$head_sha\")) | sort_by(.mergedAt // \"\") | reverse | (.[0] // {}) | [(.state // \"\"), (.mergedAt // \"\"), (.url // \"\")] | join(\"\u001f\")" \
+    2>/dev/null || true)"
+  if [[ -z "$state_line" ]]; then
+    return 1
+  fi
+
+  IFS=$'\x1f' read -r parsed_state parsed_merged_at parsed_url <<< "$state_line"
+  if [[ -z "$parsed_state" && -z "$parsed_merged_at" && -z "$parsed_url" ]]; then
+    return 1
+  fi
+  if [[ "$parsed_state" != "MERGED" && -z "$parsed_merged_at" ]]; then
+    return 1
+  fi
+
+  PR_STATE="$parsed_state"
+  PR_MERGED_AT="$parsed_merged_at"
+  if [[ -n "$parsed_url" ]]; then
+    pr_url="$parsed_url"
+  fi
+  return 0
+}
+
 wait_for_pr_merge() {
   local deadline
   deadline=$(( $(date +%s) + WAIT_TIMEOUT_SECONDS ))
@@ -509,9 +547,20 @@ wait_for_pr_merge() {
 }
 
 run_pr_flow() {
+  local source_head_sha=""
+
   if ! command -v "$GH_BIN" >/dev/null 2>&1; then
     echo "[agent-branch-finish] PR fallback requested but GitHub CLI not found: ${GH_BIN}" >&2
     return 1
+  fi
+
+  source_head_sha="$(git -C "$repo_root" rev-parse "$SOURCE_BRANCH" 2>/dev/null || true)"
+  if read_merged_pr_for_head "$source_head_sha"; then
+    echo "[agent-branch-finish] Source branch head already landed in a merged PR; skipping new PR creation and continuing cleanup." >&2
+    if [[ -n "$pr_url" ]]; then
+      echo "[agent-branch-finish] Merged PR: ${pr_url}" >&2
+    fi
+    return 0
   fi
 
   git -C "$source_worktree" push -u origin "$SOURCE_BRANCH"

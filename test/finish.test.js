@@ -466,6 +466,85 @@ exit 1
   assert.equal(result.stdout.trim(), '', 'agent branch should be deleted on origin');
 });
 
+test('agent-branch-finish cleanup skips duplicate PR creation when the current head already landed in a merged PR', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['push', 'origin', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  result = runCmd('git', ['checkout', '-b', 'agent/test-pr-merged-head-rerun'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  commitFile(repoDir, 'agent-pr-merged-head-rerun.txt', 'merged head rerun\n', 'merged head rerun change');
+  result = runCmd('git', ['push', '-u', 'origin', 'agent/test-pr-merged-head-rerun'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runCmd('git', ['rev-parse', 'HEAD'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const headSha = result.stdout.trim();
+
+  const { fakePath: fakeGhPath } = createFakeGhScript(`
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  if [[ " $* " == *" --state merged "* ]] && [[ " $* " == *" --json state,mergedAt,url,headRefOid "* ]]; then
+    printf 'MERGED\\x1f2026-04-22T21:37:13Z\\x1fhttps://example.test/pr/already-merged-head\\n'
+    exit 0
+  fi
+  echo "unexpected gh pr list args: $*" >&2
+  exit 1
+fi
+if [[ "$1" == "pr" && "$2" == "create" ]]; then
+  echo "duplicate PR creation should have been skipped" >&2
+  exit 1
+fi
+if [[ "$1" == "pr" && "$2" == "merge" ]]; then
+  echo "duplicate PR merge should have been skipped" >&2
+  exit 1
+fi
+if [[ "$1" == "pr" && "$2" == "view" ]]; then
+  echo "unexpected gh pr view args: $*" >&2
+  exit 1
+fi
+echo "unexpected gh args: $*" >&2
+exit 1
+`);
+
+  const finish = runBranchFinish(
+    ['--branch', 'agent/test-pr-merged-head-rerun', '--base', 'dev', '--mode', 'pr', '--cleanup'],
+    repoDir,
+    {
+      GUARDEX_GH_BIN: fakeGhPath,
+      GUARDEX_TEST_HEAD_SHA: headSha,
+    },
+  );
+  assert.equal(finish.status, 0, finish.stderr || finish.stdout);
+  assert.match(
+    finish.stderr,
+    /Source branch head already landed in a merged PR; skipping new PR creation and continuing cleanup\./,
+  );
+  assert.match(
+    finish.stderr,
+    /Merged PR: https:\/\/example\.test\/pr\/already-merged-head/,
+  );
+  assert.match(
+    finish.stdout,
+    /Merged 'agent\/test-pr-merged-head-rerun' into 'dev' via pr flow and cleaned source branch\/worktree\./,
+  );
+
+  result = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-pr-merged-head-rerun'], repoDir);
+  assert.notEqual(result.status, 0, 'agent branch should be deleted locally');
+  result = runCmd('git', ['ls-remote', '--heads', 'origin', 'agent/test-pr-merged-head-rerun'], repoDir);
+  assert.equal(result.stdout.trim(), '', 'agent branch should be deleted on origin');
+});
+
 
 test('agent-branch-finish cleanup succeeds from active agent worktree when base branch is checked out elsewhere', () => {
   const repoDir = initRepo();
