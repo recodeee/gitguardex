@@ -1,12 +1,8 @@
 <p align="center">
-  <img alt="gitguardex logo" src="./logo.png" width="260">
+  <img alt="gitguardex logo" src="./logo.png" width="390">
 </p>
 
-<h1 align="center">gitguardex</h1>
-
-<p align="center">
-  guardian t-rex for multi-agent repos
-</p>
+<h1 align="center"> guardian t-rex for multi-agent repos</h1>
 
 <p align="center">
   isolated worktrees, file locks, and PR-only merges for codex, claude, and human teammates
