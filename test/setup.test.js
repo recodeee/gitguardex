@@ -142,6 +142,10 @@ test('setup provisions workflow files and repo config', () => {
     agentsContent,
     /For every new task, including follow-up work in the same chat\/session, if an assigned agent sub-branch\/worktree is already open, continue in that sub-branch/,
   );
+  assert.match(agentsContent, /## Token \/ Context Budget/);
+  assert.match(agentsContent, /Default: less word, same proof\./);
+  assert.match(agentsContent, /## OMX Caveman Style/);
+  assert.match(agentsContent, /Answer order stays fixed: answer first, cause next, fix or next step last\./);
 
   const gitignoreContent = fs.readFileSync(path.join(repoDir, '.gitignore'), 'utf8');
   assert.match(gitignoreContent, /# multiagent-safety:START/);
@@ -821,6 +825,8 @@ test('install configures AGENTS managed policy block with GX contract wording', 
     agentsContent,
     /OMX completion policy: when a task is done, the agent must commit the task changes, push the agent branch, and create\/update a PR/,
   );
+  assert.match(agentsContent, /## Token \/ Context Budget/);
+  assert.match(agentsContent, /## OMX Caveman Style/);
 });
 
 

@@ -141,6 +141,17 @@ test('prompt --exec rejects prompt-only parts', () => {
   assert.match(result.stderr, /Exec-capable parts:/);
 });
 
+test('prompt --snippet prints the managed AGENTS template with token budget and caveman rules', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--snippet'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /<!-- multiagent-safety:START -->/);
+  assert.match(result.stdout, /## Token \/ Context Budget/);
+  assert.match(result.stdout, /Default: less word, same proof\./);
+  assert.match(result.stdout, /## OMX Caveman Style/);
+  assert.match(result.stdout, /Answer order stays fixed: answer first, cause next, fix or next step last\./);
+});
+
 
 test('deprecated copy-prompt alias still works and warns', () => {
   const repoDir = initRepo();
