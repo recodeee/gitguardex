@@ -672,6 +672,11 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.23
+- Bumped `@imdeadpool/guardex` from `7.0.22` to `7.0.23` so GitHub release and npm can advance together after `7.0.22` reached npm without a matching published GitHub release.
+- Active Agents stays easier to scan and more truthful: the package repo remains the canonical source, inspect/install paths stay loadable across VS Code churn, and session rows group under worktrees with clearer merged-cleanup truth.
+- Guardex prompt and finish guidance now pushes faster phase-based execution, keeps helper behavior single-sourced, and avoids fragmented probe loops when cleanup or branch-deletion races appear.
+
 ### v7.0.22
 - Bumped `@imdeadpool/guardex` from `7.0.21` to `7.0.22` so npm can publish the next release from the current merged mainline.
 - The shipped `main` payload already includes lower-token prompt slices, SCM-selected lane visibility, truthful merged-cleanup evidence, the Active Agents brand/icon refresh, and the remaining CLI extraction cleanups without changing Guardex behavior.
