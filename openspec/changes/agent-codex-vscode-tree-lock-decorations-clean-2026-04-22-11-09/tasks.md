@@ -27,6 +27,8 @@ This change is complete only when all of the following are true:
 
 ## 4. Cleanup
 
-- [ ] 4.1 Run `bash scripts/agent-branch-finish.sh --branch agent/codex/vscode-tree-lock-decorations-clean-2026-04-22-11-09 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
-- [ ] 4.3 Confirm the sandbox worktree is gone and the branch refs are cleaned up.
+- [x] 4.1 Run `bash scripts/agent-branch-finish.sh --branch agent/codex/vscode-tree-lock-decorations-clean-2026-04-22-11-09 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff. PR #287 (`https://github.com/recodeee/gitguardex/pull/287`) reached `MERGED` at `2026-04-22T10:05:39Z`; merge commit: `d2ca2998a62c309982ac66b4d9a32c4b4137fb93`.
+- [x] 4.3 Confirm the sandbox worktree is gone and the branch refs are cleaned up.
+
+Completion note: The final closeout landed via PR #287 (`https://github.com/recodeee/gitguardex/pull/287`), which reached `MERGED` at `2026-04-22T10:05:39Z` with merge commit `d2ca2998a62c309982ac66b4d9a32c4b4137fb93`. The agent worktree `agent__codex__vscode-tree-lock-decorations-clean-2026-04-22-11-09` is gone from `.omx/agent-worktrees/`, the merged source branch refs were cleared by `git fetch --prune origin`, and the local main checkout remained clean after closeout verification.
