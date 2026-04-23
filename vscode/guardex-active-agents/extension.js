@@ -56,6 +56,7 @@ const MANAGED_REPO_SCAN_IGNORED_FOLDERS = [
 const SESSION_ACTIVITY_GROUPS = [
   { kind: 'blocked', label: 'BLOCKED' },
   { kind: 'working', label: 'WORKING NOW' },
+  { kind: 'finished', label: 'FINISHED' },
   { kind: 'idle', label: 'THINKING' },
   { kind: 'stalled', label: 'STALLED' },
   { kind: 'dead', label: 'DEAD' },
@@ -63,6 +64,7 @@ const SESSION_ACTIVITY_GROUPS = [
 const SESSION_ACTIVITY_ICON_IDS = {
   blocked: 'warning',
   working: 'loading~spin',
+  finished: 'pass-filled',
   idle: 'comment-discussion',
   stalled: 'clock',
   dead: 'error',
@@ -120,6 +122,10 @@ function iconColorId(iconId) {
       return 'terminal.ansiBlue';
     case 'organization':
       return 'terminal.ansiGreen';
+    case 'pass-filled':
+    case 'pass':
+    case 'check':
+      return 'testing.iconPassed';
     default:
       return '';
   }
@@ -542,7 +548,9 @@ function isProtectedBranchName(branch) {
 
 function countWorkingSessions(sessions) {
   return sessions.filter((session) => (
-    session.activityKind === 'working' || session.activityKind === 'blocked'
+    session.activityKind === 'working'
+    || session.activityKind === 'blocked'
+    || session.activityKind === 'finished'
   )).length;
 }
 
@@ -583,6 +591,9 @@ function sessionFreshnessLabel(session, now = Date.now()) {
   if (session.activityKind === 'blocked') {
     return 'Needs attention';
   }
+  if (session.activityKind === 'finished') {
+    return 'Finished';
+  }
   if (session.activityKind === 'stalled') {
     return 'Possibly stale';
   }
@@ -610,6 +621,8 @@ function sessionStatusLabel(session) {
       return 'Blocked';
     case 'working':
       return 'Working';
+    case 'finished':
+      return 'Finished';
     case 'idle':
       return 'Idle';
     case 'stalled':
@@ -934,6 +947,9 @@ function workingSessionSortKey(session) {
   }
   if (session.deltaLabel === 'New') {
     return 3;
+  }
+  if (session.activityKind === 'finished') {
+    return 5;
   }
   return 4;
 }
@@ -2789,7 +2805,9 @@ function buildSessionDetailItems(session) {
 function buildWorkingNowNodes(sessions) {
   const sessionEntries = sortSessionsForWorkingNow(
     sessions.filter((session) => (
-      session.activityKind === 'working' || session.activityKind === 'blocked'
+      session.activityKind === 'working'
+      || session.activityKind === 'blocked'
+      || session.activityKind === 'finished'
     )),
   ).map((session) => ({
     projectRelativePath: resolveSessionProjectRelativePath(session),
@@ -2802,7 +2820,9 @@ function buildWorkingNowNodes(sessions) {
 function buildIdleThinkingNodes(sessions) {
   const sessionEntries = sortSessionsForIdleThinking(
     sessions.filter((session) => !(
-      session.activityKind === 'working' || session.activityKind === 'blocked'
+      session.activityKind === 'working'
+      || session.activityKind === 'blocked'
+      || session.activityKind === 'finished'
     )),
   ).map((session) => ({
     projectRelativePath: resolveSessionProjectRelativePath(session),

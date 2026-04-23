@@ -700,17 +700,35 @@ function deriveSessionActivity(session, options = {}) {
       .filter(Boolean))]
       .sort((left, right) => left.localeCompare(right));
 
+    const workingLatestFileActivityMs = deriveLatestWorktreeFileActivity(session.worktreePath, {
+      now,
+      useCache: options.useCache,
+    });
+    const workingLastFileActivityAt = Number.isFinite(workingLatestFileActivityMs)
+      ? new Date(workingLatestFileActivityMs).toISOString()
+      : '';
+    const workingLastFileActivityLabel = workingLastFileActivityAt
+      ? formatElapsedFrom(workingLastFileActivityAt, now)
+      : '';
+    const workingFileActivityAgeMs = Number.isFinite(workingLatestFileActivityMs)
+      ? Math.max(0, now - workingLatestFileActivityMs)
+      : null;
+    const isFinishedUncommitted = workingFileActivityAgeMs !== null
+      && workingFileActivityAgeMs > IDLE_ACTIVITY_WINDOW_MS;
+
     return {
-      activityKind: 'working',
-      activityLabel: 'working',
+      activityKind: isFinishedUncommitted ? 'finished' : 'working',
+      activityLabel: isFinishedUncommitted ? 'finished' : 'working',
       activityCountLabel: formatFileCount(worktreeChangedPaths.length),
-      activitySummary: previewChangedPaths(worktreeChangedPaths),
+      activitySummary: isFinishedUncommitted && workingLastFileActivityLabel
+        ? `${previewChangedPaths(worktreeChangedPaths)} · idle ${workingLastFileActivityLabel}`
+        : previewChangedPaths(worktreeChangedPaths),
       changeCount: worktreeChangedPaths.length,
       changedPaths,
       worktreeChangedPaths: worktreeRelativePaths,
       pidAlive,
-      lastFileActivityAt: '',
-      lastFileActivityLabel: '',
+      lastFileActivityAt: workingLastFileActivityAt,
+      lastFileActivityLabel: workingLastFileActivityLabel,
     };
   }
 
