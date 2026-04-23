@@ -75,6 +75,8 @@ test('prompt outputs AI setup instructions', () => {
   assert.match(result.stdout, /gx locks claim/);
   assert.match(result.stdout, /inspect once -> patch once -> verify once -> gx branch finish/);
   assert.match(result.stdout, /avoid repeated peeks or stdin loops/);
+  assert.match(result.stdout, /checkpoint after each milestone: Task -> Done -> Current status -> Next/);
+  assert.match(result.stdout, /keep execution log separate from reasoning context/);
   assert.match(result.stdout, /gx finish --all/);
   assert.match(result.stdout, /\/opsx:propose/);
   assert.match(result.stdout, /https:\/\/github\.com\/apps\/pull/);
@@ -104,6 +106,8 @@ test('prompt --part outputs only the selected checklist slices', () => {
   assert.match(result.stdout, /^Task loop:/m);
   assert.match(result.stdout, /gx branch start "<task>" "<agent>"/);
   assert.match(result.stdout, /inspect once -> patch once -> verify once -> gx branch finish/);
+  assert.match(result.stdout, /checkpoint after each milestone: Task -> Done -> Current status -> Next/);
+  assert.match(result.stdout, /keep execution log separate from reasoning context/);
   assert.match(result.stdout, /^Finish:/m);
   assert.match(result.stdout, /gx finish --all/);
   assert.doesNotMatch(result.stdout, /GitGuardex \(gx\) setup checklist/);
@@ -148,6 +152,9 @@ test('prompt --snippet prints the managed AGENTS template with token budget and 
   assert.match(result.stdout, /<!-- multiagent-safety:START -->/);
   assert.match(result.stdout, /## Token \/ Context Budget/);
   assert.match(result.stdout, /Default: less word, same proof\./);
+  assert.match(result.stdout, /Keep raw terminal interaction out of long-lived context/);
+  assert.match(result.stdout, /Keep execution log separate from reasoning context/);
+  assert.match(result.stdout, /Use a fixed checkpoint shape when compacting: `Task`, `Done`, `Current status`, and `Next`\./);
   assert.match(result.stdout, /## OMX Caveman Style/);
   assert.match(result.stdout, /Answer order stays fixed: answer first, cause next, fix or next step last\./);
 });

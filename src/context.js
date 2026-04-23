@@ -447,6 +447,8 @@ const AI_SETUP_PARTS = [
       'gx branch start "<task>" "<agent>"',
       'then gx locks claim --branch "<agent-branch>" <file...> -> inspect once -> patch once -> verify once -> gx branch finish',
       'batch discovery, git/PR, and CI by phase; avoid repeated peeks or stdin loops',
+      'checkpoint after each milestone: Task -> Done -> Current status -> Next; keep only the latest checkpoint(s) in active context',
+      'summarize tool results, keep stdin/process chatter ephemeral, and keep execution log separate from reasoning context',
     ],
     execLines: [
       'gx branch start "<task>" "<agent>"',
