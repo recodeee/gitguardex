@@ -5,3 +5,4 @@
 - Promote the product name to the top-level heading and keep the existing install/about copy below it.
 - Keep verification focused on `test/metadata.test.js` so README drift gets caught without reopening broader suites.
 - Result: README hero now leads with `GitGuardex`, uses two scan-friendly badge rows, and passed `node --test test/metadata.test.js` (`24/24`); `openspec validate --specs` returned `No items found to validate.` for this notes-only lane.
+- BLOCKED: `gx branch finish --via-pr --wait-for-merge --cleanup` opened PR `#396` (`https://github.com/recodeee/gitguardex/pull/396`), but merge is currently blocked by branch protection because GitHub still shows `REVIEW_REQUIRED` and all required checks remain `QUEUED`.
