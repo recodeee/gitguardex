@@ -281,8 +281,9 @@ function createMockVscode(tempRoot) {
   }
 
   class ThemeIcon {
-    constructor(id) {
+    constructor(id, color) {
       this.id = id;
+      this.color = color;
     }
   }
 
@@ -1917,7 +1918,8 @@ test('active-agents extension shows grouped repo changes beside active agents', 
   fs.writeFileSync(path.join(worktreePath, 'tracked.txt'), 'base\nchanged\n', 'utf8');
   fs.writeFileSync(path.join(worktreePath, 'src', 'nested.js'), 'base\nchanged\n', 'utf8');
 
-  const sessionPath = writeSessionRecord(tempRoot, sessionSchema.buildSessionRecord({
+  const latestTaskPreview = 'Fix cave hivemind hero layout';
+  const liveSessionRecord = sessionSchema.buildSessionRecord({
     repoRoot: tempRoot,
     branch: 'agent/codex/live-task',
     taskName: 'live-task',
@@ -1925,7 +1927,9 @@ test('active-agents extension shows grouped repo changes beside active agents', 
     worktreePath,
     pid: process.pid,
     cliName: 'codex',
-  }));
+  });
+  liveSessionRecord.latestTaskPreview = latestTaskPreview;
+  const sessionPath = writeSessionRecord(tempRoot, liveSessionRecord);
 
   const { registrations, vscode } = createMockVscode(tempRoot);
   vscode.workspace.findFiles = async () => [{ fsPath: sessionPath }];
@@ -1975,11 +1979,12 @@ test('active-agents extension shows grouped repo changes beside active agents', 
 
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   assert.equal(worktreeItem, null);
-  assert.equal(sessionItem.label, 'live-task');
+  assert.equal(sessionItem.label, latestTaskPreview);
   assert.equal(sessionItem.session.branch, 'agent/codex/live-task');
   assert.match(sessionItem.description, /^Working: codex · via OpenAI · 2 changed files/);
-  assert.match(sessionItem.tooltip, /Recent Changed src\/nested\.js, tracked\.txt/);
+  assert.match(sessionItem.tooltip, /Recent Fix cave hivemind hero layout/);
   assert.equal(sessionItem.iconPath.id, 'loading~spin');
+  assert.equal(sessionItem.iconPath.color.id, 'gitDecoration.addedResourceForeground');
   const sessionDetails = await provider.getChildren(sessionItem);
   assert.equal(sessionDetails.find((item) => item.label === 'Top files')?.description, 'src/nested.js, tracked.txt');
   assert.deepEqual(registrations.treeViews[0].badge, {
@@ -1990,24 +1995,26 @@ test('active-agents extension shows grouped repo changes beside active agents', 
   const [unassignedChangeItem] = await provider.getChildren(unassignedSection);
   assert.equal(unassignedChangeItem.label, 'root-file.txt');
   assert.equal(unassignedChangeItem.description, 'M · Protected branch');
+  assert.equal(unassignedChangeItem.iconPath.id, 'warning');
+  assert.equal(unassignedChangeItem.iconPath.color.id, 'list.warningForeground');
 
   const activeAgentTree = await getSectionByLabel(provider, advancedSection, 'Active agent tree');
   const rawWorkingSection = await getSectionByLabel(provider, activeAgentTree, 'WORKING NOW');
   const [rawWorktreeItem] = await provider.getChildren(rawWorkingSection);
-  assert.equal(rawWorktreeItem.label, 'live-task');
+  assert.equal(rawWorktreeItem.label, latestTaskPreview);
   assert.equal(rawWorktreeItem.description, 'working: codex');
   const [rawSessionItem] = await provider.getChildren(rawWorktreeItem);
-  assert.equal(rawSessionItem.label, 'codex/live-task');
+  assert.equal(rawSessionItem.label, latestTaskPreview);
   assert.match(rawSessionItem.description, /^Working · 2 files · /);
 
   const rawPathTree = await getSectionByLabel(provider, advancedSection, 'Raw path tree');
   const [worktreeGroup, repoRootGroup] = await provider.getChildren(rawPathTree);
-  assert.equal(worktreeGroup.label, 'live-task');
+  assert.equal(worktreeGroup.label, latestTaskPreview);
   assert.equal(worktreeGroup.description, 'codex · 2 files');
   assert.equal(repoRootGroup.label, 'Repo root');
 
   const [sessionGroup] = await provider.getChildren(worktreeGroup);
-  assert.equal(sessionGroup.label, 'codex/live-task');
+  assert.equal(sessionGroup.label, latestTaskPreview);
   assert.match(sessionGroup.description, /^Working · 2 files · /);
   const [folderItem, trackedItem] = await provider.getChildren(sessionGroup);
   assert.equal(folderItem.label, 'src');
@@ -2103,6 +2110,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   assert.equal(sessionItem.label, 'Implement live worktree telemetry');
   assert.equal(sessionItem.session.branch, 'agent/codex/lock-visible-task');
   assert.match(sessionItem.description, /^Working: codex · via OpenAI · snapshot nagyviktor@edixa\.com · 1 changed file/);
+  assert.equal(sessionItem.iconPath.color.id, 'gitDecoration.addedResourceForeground');
   assert.equal(sessionItem.session.snapshotName, 'nagyviktor@edixa.com');
   assert.match(sessionItem.tooltip, /Telemetry updated 2026-04-22T09:01:00.000Z/);
   assert.match(sessionItem.tooltip, /Snapshot nagyviktor@edixa\.com/);
@@ -2121,7 +2129,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
     `gitguardex-agent://${sessionSchema.sanitizeBranchForFile('agent/codex/lock-visible-task')}`,
   );
   const [rawSessionItem] = await provider.getChildren(rawWorktreeItem);
-  assert.equal(rawSessionItem.label, 'codex/lock-visible-task');
+  assert.equal(rawSessionItem.label, 'Implement live worktree telemetry');
   assert.match(rawSessionItem.description, /^Working · 1 file · /);
 
   const snapshotDecoration = registrations.decorationProviders[0].provideFileDecoration(vscode.Uri.parse(
@@ -2397,7 +2405,7 @@ test('active-agents extension decorates sessions and repo changes from the lock 
   assert.equal(worktreeGroup.description, 'working: codex');
   assert.equal(worktreeGroup.resourceUri.toString(), `gitguardex-agent://${sessionSchema.sanitizeBranchForFile(branch)}`);
   const [sessionGroup] = await provider.getChildren(worktreeGroup);
-  assert.equal(sessionGroup.label, 'codex/live-task');
+  assert.equal(sessionGroup.label, 'live-task');
   assert.match(sessionGroup.description, /^Working · 1 file · /);
   const [sessionChangeItem] = await provider.getChildren(sessionGroup);
   assert.equal(sessionChangeItem.label, 'tracked.txt');

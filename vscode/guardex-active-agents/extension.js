@@ -73,6 +73,46 @@ const SESSION_PROVIDER_BRANDS = {
   },
 };
 
+function iconColorId(iconId) {
+  switch (iconId) {
+    case 'warning':
+    case 'clock':
+      return 'list.warningForeground';
+    case 'error':
+      return 'list.errorForeground';
+    case 'loading~spin':
+      return 'gitDecoration.addedResourceForeground';
+    case 'comment-discussion':
+    case 'info':
+    case 'repo':
+    case 'folder':
+    case 'graph':
+    case 'history':
+      return 'textLink.foreground';
+    case 'git-branch':
+      return 'gitDecoration.modifiedResourceForeground';
+    case 'account':
+      return 'terminal.ansiYellow';
+    case 'sparkle':
+      return 'terminal.ansiMagenta';
+    case 'list-flat':
+      return 'terminal.ansiCyan';
+    case 'list-tree':
+      return 'terminal.ansiBlue';
+    default:
+      return '';
+  }
+}
+
+function themeIcon(iconId, colorId = iconColorId(iconId)) {
+  if (!iconId) {
+    return undefined;
+  }
+  return colorId
+    ? new vscode.ThemeIcon(iconId, new vscode.ThemeColor(colorId))
+    : new vscode.ThemeIcon(iconId);
+}
+
 function sessionDecorationUri(branch) {
   return vscode.Uri.parse(`${SESSION_DECORATION_SCHEME}://${sanitizeBranchForFile(branch)}`);
 }
@@ -310,7 +350,7 @@ async function ensureManagedRepoScanIgnores() {
 
 function sessionIdentityLabel(session) {
   const agentName = typeof session?.agentName === 'string' ? session.agentName.trim() : '';
-  const taskName = typeof session?.taskName === 'string' ? session.taskName.trim() : '';
+  const taskName = sessionDisplayLabel(session);
   const label = typeof session?.label === 'string' ? session.label.trim() : '';
 
   if (agentName && taskName) {
@@ -634,7 +674,7 @@ function buildSessionTooltip(session, description) {
       ? `Provider ${provider.label}${provider.cliName ? ` (${provider.cliName})` : ''}`
       : '',
     sessionSnapshotDisplayName(session) ? `Snapshot ${sessionSnapshotDisplayName(session)}` : '',
-    `${session.agentName} · ${session.taskName}`,
+    `${session.agentName} · ${sessionDisplayLabel(session)}`,
     `Status ${description}`,
     sessionHealthSummary ? `Session health ${sessionHealthSummary}` : '',
     sessionHealthDrivers ? `Drivers ${sessionHealthDrivers}` : '',
@@ -1038,7 +1078,7 @@ class InfoItem extends vscode.TreeItem {
   constructor(label, description = '') {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.description = description;
-    this.iconPath = new vscode.ThemeIcon('info');
+    this.iconPath = themeIcon('info');
     this.tooltip = [label, description].filter(Boolean).join('\n');
   }
 }
@@ -1048,7 +1088,7 @@ class DetailItem extends vscode.TreeItem {
     super(label, vscode.TreeItemCollapsibleState.None);
     this.description = description;
     this.tooltip = options.tooltip || [label, description].filter(Boolean).join('\n');
-    this.iconPath = options.iconId ? new vscode.ThemeIcon(options.iconId) : undefined;
+    this.iconPath = options.iconId ? themeIcon(options.iconId, options.iconColorId) : undefined;
   }
 }
 
@@ -1063,7 +1103,7 @@ class RepoItem extends vscode.TreeItem {
     this.overview = options.overview || buildRepoOverview(sessions, this.unassignedChanges, this.lockEntries);
     this.description = buildRepoDescription(this.overview);
     this.tooltip = buildRepoTooltip(repoRoot, this.overview);
-    this.iconPath = new vscode.ThemeIcon('repo');
+    this.iconPath = themeIcon('repo');
     this.contextValue = 'gitguardex.repo';
   }
 }
@@ -1078,7 +1118,7 @@ class SectionItem extends vscode.TreeItem {
     this.description = options.description
       || (items.length > 0 ? String(items.length) : '');
     this.tooltip = options.tooltip || [label, this.description].filter(Boolean).join('\n');
-    this.iconPath = options.iconId ? new vscode.ThemeIcon(options.iconId) : undefined;
+    this.iconPath = options.iconId ? themeIcon(options.iconId, options.iconColorId) : undefined;
     this.contextValue = 'gitguardex.section';
   }
 }
@@ -1106,7 +1146,7 @@ class WorktreeItem extends vscode.TreeItem {
       normalizedWorktreePath,
       ...sessionList.map((session) => session.branch).filter(Boolean),
     ].filter(Boolean).join('\n');
-    this.iconPath = new vscode.ThemeIcon(options.iconId || 'folder');
+    this.iconPath = themeIcon(options.iconId || 'folder', options.iconColorId);
     if (options.useSessionDecoration && primarySession?.branch) {
       this.resourceUri = sessionDecorationUri(primarySession.branch);
     }
@@ -1145,7 +1185,7 @@ class SessionItem extends vscode.TreeItem {
       ? buildRawSessionDescription(session)
       : buildSessionCardDescription(session);
     this.tooltip = buildSessionTooltip(session, this.description);
-    this.iconPath = new vscode.ThemeIcon(resolveSessionActivityIconId(session.activityKind));
+    this.iconPath = themeIcon(resolveSessionActivityIconId(session.activityKind));
     this.contextValue = 'gitguardex.session';
     this.command = {
       command: 'gitguardex.activeAgents.openWorktree',
@@ -1167,7 +1207,7 @@ class FolderItem extends vscode.TreeItem {
     this.items = items;
     this.description = typeof options.description === 'string' ? options.description : '';
     this.tooltip = options.tooltip || relativePath || label;
-    this.iconPath = new vscode.ThemeIcon(options.iconId || 'folder');
+    this.iconPath = themeIcon(options.iconId || 'folder', options.iconColorId);
     this.contextValue = options.contextValue || 'gitguardex.folder';
   }
 }
@@ -1192,7 +1232,7 @@ class ChangeItem extends vscode.TreeItem {
     ].filter(Boolean).join('\n');
     this.resourceUri = vscode.Uri.file(change.absolutePath);
     if (options.iconId || change.hasForeignLock) {
-      this.iconPath = new vscode.ThemeIcon(options.iconId || 'warning');
+      this.iconPath = themeIcon(options.iconId || 'warning', options.iconColorId || 'list.warningForeground');
     }
     this.contextValue = 'gitguardex.change';
     this.command = {
@@ -1233,12 +1273,33 @@ function resolveStartAgentCommand(repoRoot, details) {
   return `gx branch start ${taskArg} ${agentArg}`;
 }
 
+function sessionTaskLabel(session) {
+  const latestTaskPreview = typeof session?.latestTaskPreview === 'string'
+    ? session.latestTaskPreview.trim()
+    : '';
+  if (latestTaskPreview) {
+    return latestTaskPreview;
+  }
+
+  const taskName = typeof session?.taskName === 'string' ? session.taskName.trim() : '';
+  if (taskName) {
+    return taskName;
+  }
+
+  return '';
+}
+
 function sessionDisplayLabel(session) {
-  return session?.taskName || session?.label || session?.branch || path.basename(session?.worktreePath || '') || 'session';
+  return sessionTaskLabel(session)
+    || session?.label
+    || compactBranchLabel(session?.branch)
+    || session?.branch
+    || path.basename(session?.worktreePath || '')
+    || 'session';
 }
 
 function sessionTreeLabel(session) {
-  return compactBranchLabel(session?.branch) || sessionDisplayLabel(session);
+  return sessionTaskLabel(session) || compactBranchLabel(session?.branch) || sessionDisplayLabel(session);
 }
 
 function worktreeDisplayLabel(worktreePath, sessions) {
@@ -2409,7 +2470,9 @@ function buildRawActiveAgentGroupNodes(sessions) {
       { rootLabel: 'Repo root' },
     );
     if (worktreeItems.length > 0) {
-      groups.push(new SectionItem(group.label, worktreeItems));
+      groups.push(new SectionItem(group.label, worktreeItems, {
+        iconId: resolveSessionActivityIconId(group.kind),
+      }));
     }
   }
 
@@ -2625,6 +2688,7 @@ class ActiveAgentsProvider {
       if (workingNowItems.length > 0) {
         sectionItems.push(new SectionItem('Working now', workingNowItems, {
           description: String(workingNowItems.length),
+          iconId: 'loading~spin',
         }));
       }
 
@@ -2633,12 +2697,14 @@ class ActiveAgentsProvider {
         sectionItems.push(new SectionItem('Idle / thinking', idleThinkingItems, {
           description: String(idleThinkingItems.length),
           collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+          iconId: 'comment-discussion',
         }));
       }
 
       if (element.unassignedChanges.length > 0) {
         sectionItems.push(new SectionItem('Unassigned changes', buildUnassignedChangeNodes(element.unassignedChanges), {
           description: String(element.unassignedChanges.length),
+          iconId: 'warning',
         }));
       }
 
@@ -2648,6 +2714,7 @@ class ActiveAgentsProvider {
         advancedItems.push(new SectionItem('Active agent tree', rawActiveAgents, {
           description: String(element.sessions.length),
           collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+          iconId: 'git-branch',
         }));
       }
       const rawChangeTree = buildGroupedChangeTreeNodes(element.sessions, element.changes);
@@ -2655,12 +2722,14 @@ class ActiveAgentsProvider {
         advancedItems.push(new SectionItem('Raw path tree', rawChangeTree, {
           description: String(element.changes.length),
           collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+          iconId: 'list-tree',
         }));
       }
       if (advancedItems.length > 0) {
         sectionItems.push(new SectionItem('Advanced details', advancedItems, {
           description: String(advancedItems.length),
           collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+          iconId: 'list-tree',
         }));
       }
       return sectionItems;
