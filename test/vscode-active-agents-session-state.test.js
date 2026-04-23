@@ -1311,6 +1311,43 @@ test('active-agents manifest does not contribute a file icon theme', () => {
   assert.equal(manifest.contributes.iconThemes, undefined);
 });
 
+test('active-agents manifest contributes restart actions for extension management and view title', () => {
+  const manifest = readExtensionManifest();
+  const templateManifest = readExtensionManifest(templateExtensionManifestPath);
+
+  const restartCommand = manifest.contributes.commands.find(
+    (entry) => entry.command === 'gitguardex.activeAgents.restart',
+  );
+  assert.deepEqual(restartCommand, {
+    command: 'gitguardex.activeAgents.restart',
+    title: 'Restart Active Agents',
+    icon: '$(debug-restart)',
+  });
+
+  const restartViewTitleAction = manifest.contributes.menus['view/title'].find(
+    (entry) => entry.command === 'gitguardex.activeAgents.restart',
+  );
+  assert.deepEqual(restartViewTitleAction, {
+    command: 'gitguardex.activeAgents.restart',
+    when: 'view == gitguardex.activeAgents',
+    group: 'navigation@8',
+  });
+
+  const restartExtensionAction = manifest.contributes.menus['extension/context'].find(
+    (entry) => entry.command === 'gitguardex.activeAgents.restart',
+  );
+  assert.deepEqual(restartExtensionAction, {
+    command: 'gitguardex.activeAgents.restart',
+    when: 'extension == recodeee.gitguardex-active-agents && extensionStatus == installed',
+    group: '2_configure@2',
+  });
+
+  assert.deepEqual(
+    manifest.contributes.menus['extension/context'],
+    templateManifest.contributes.menus['extension/context'],
+  );
+});
+
 test('active-agents extension auto-installs a newer workspace build and offers reload', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-autoupdate-'));
   const repoManifest = {
@@ -1412,6 +1449,7 @@ test('active-agents extension registers tree and decoration providers', async ()
   const provider = registrations.providers[0].provider;
   assert.equal(typeof provider.getTreeItem, 'function');
   assert.equal(typeof registrations.commands.get('gitguardex.activeAgents.startAgent'), 'function');
+  assert.equal(typeof registrations.commands.get('gitguardex.activeAgents.restart'), 'function');
   assert.equal(typeof registrations.commands.get('gitguardex.activeAgents.inspect'), 'function');
 
   const rootItems = await provider.getChildren();
@@ -1419,6 +1457,28 @@ test('active-agents extension registers tree and decoration providers', async ()
   assert.equal(rootItems[0].label, 'No active Guardex agents');
   assert.equal(registrations.treeViews[0].badge, undefined);
   assert.equal(registrations.treeViews[0].message, undefined);
+
+  for (const subscription of context.subscriptions) {
+    subscription.dispose?.();
+  }
+});
+
+test('active-agents restart command restarts the extension host for this extension only', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-restart-command-'));
+  const { registrations, vscode } = createMockVscode(tempRoot);
+  const extension = loadExtensionWithMockVscode(vscode);
+  const context = { subscriptions: [] };
+
+  extension.activate(context);
+  await flushAsyncWork();
+
+  await registrations.commands.get('gitguardex.activeAgents.restart')('recodeee.gitguardex-active-agents');
+  await registrations.commands.get('gitguardex.activeAgents.restart')('someone.else');
+
+  const restartCalls = registrations.executedCommands.filter(
+    (entry) => entry.command === 'workbench.action.restartExtensionHost',
+  );
+  assert.equal(restartCalls.length, 1);
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();

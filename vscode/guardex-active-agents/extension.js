@@ -34,6 +34,8 @@ const ACTIVE_AGENTS_MANIFEST_RELATIVE = path.join('vscode', 'guardex-active-agen
 const ACTIVE_AGENTS_INSTALL_SCRIPT_RELATIVE = path.join('scripts', 'install-vscode-active-agents-extension.js');
 const RELOAD_WINDOW_ACTION = 'Reload Window';
 const UPDATE_LATER_ACTION = 'Later';
+const ACTIVE_AGENTS_EXTENSION_ID = 'recodeee.gitguardex-active-agents';
+const RESTART_EXTENSION_HOST_COMMAND = 'workbench.action.restartExtensionHost';
 const REFRESH_POLL_INTERVAL_MS = 30_000;
 const INSPECT_PANEL_VIEW_TYPE = 'gitguardex.activeAgents.inspect';
 const GIT_CONFIGURATION_SECTION = 'git';
@@ -1685,6 +1687,13 @@ function syncSession(session) {
   runSessionTerminalCommand(session, 'Sync', 'sync', 'gx sync');
 }
 
+async function restartActiveAgents(extensionId) {
+  if (extensionId && extensionId !== ACTIVE_AGENTS_EXTENSION_ID) {
+    return;
+  }
+  await vscode.commands.executeCommand(RESTART_EXTENSION_HOST_COMMAND);
+}
+
 function execFileAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     cp.execFile(command, args, options, (error, stdout = '', stderr = '') => {
@@ -3281,6 +3290,7 @@ function activate(context) {
     vscode.window.registerFileDecorationProvider(decorationProvider),
     vscode.commands.registerCommand('gitguardex.activeAgents.startAgent', () => startAgentFromPrompt(refresh)),
     vscode.commands.registerCommand('gitguardex.activeAgents.refresh', refresh),
+    vscode.commands.registerCommand('gitguardex.activeAgents.restart', restartActiveAgents),
     vscode.commands.registerCommand('gitguardex.activeAgents.focus', async () => {
       await vscode.commands.executeCommand('workbench.view.extension.gitguardex.activeAgentsContainer');
     }),
