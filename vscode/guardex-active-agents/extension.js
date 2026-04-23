@@ -189,8 +189,8 @@ function sessionIdleDecoration(session, now = Date.now()) {
   if (session.activityKind === 'blocked') {
     return {
       badge: '!',
-      tooltip: 'blocked',
-      color: new vscode.ThemeColor('list.warningForeground'),
+      tooltip: 'Blocked: needs attention',
+      color: new vscode.ThemeColor('list.errorForeground'),
     };
   }
   if (session.activityKind === 'dead') {
@@ -284,6 +284,12 @@ function uniqueStringList(values) {
   }
 
   return result;
+}
+
+function trimSummaryLabel(value) {
+  return typeof value === 'string'
+    ? value.trim().replace(/\.+$/, '')
+    : '';
 }
 
 function normalizeSessionProviderToken(value) {
@@ -712,6 +718,10 @@ function sessionCompactTimeLabel(session) {
   return session.lastActiveLabel || session.elapsedLabel || formatElapsedFrom(session.startedAt);
 }
 
+function sessionProviderLabel(session) {
+  return resolveSessionProvider(session)?.label || '';
+}
+
 function buildSessionTopFiles(session) {
   return uniqueStringList((session?.worktreeChangedPaths || [])
     .map(normalizeRelativePath)
@@ -742,6 +752,57 @@ function sessionRiskBadges(session) {
   ].filter(Boolean));
 }
 
+function buildSessionCauseSummary(session) {
+  const candidates = session?.activityKind === 'blocked'
+    ? [session?.activitySummary, session?.recentChangeSummary]
+    : [session?.recentChangeSummary, session?.activitySummary];
+  return uniqueStringList(candidates.map(trimSummaryLabel).filter(Boolean))
+    .find((value) => (
+      value
+      && value !== trimSummaryLabel(sessionStatusLabel(session))
+      && value !== trimSummaryLabel(sessionFreshnessLabel(session))
+    )) || '';
+}
+
+function buildSessionStatusFacts(session) {
+  return uniqueStringList([
+    sessionStatusLabel(session),
+    buildSessionCauseSummary(session),
+    sessionFreshnessLabel(session),
+  ].map(trimSummaryLabel).filter(Boolean));
+}
+
+function buildSessionStatusDescription(session) {
+  return buildSessionStatusFacts(session).join(' · ');
+}
+
+function buildSessionContextFacts(session) {
+  const contextParts = [];
+  const providerLabel = sessionProviderLabel(session);
+  if (providerLabel) {
+    contextParts.push(providerLabel);
+  }
+  if (session.conflictCount > 0) {
+    contextParts.push(formatCountLabel(session.conflictCount, 'conflict'));
+  } else if (session.lockCount > 0) {
+    contextParts.push(formatCountLabel(session.lockCount, 'lock'));
+  } else {
+    const fileCountLabel = sessionFileCountLabel(session);
+    if (fileCountLabel) {
+      contextParts.push(fileCountLabel);
+    }
+  }
+  const timeLabel = sessionCompactTimeLabel(session);
+  if (timeLabel) {
+    contextParts.push(timeLabel);
+  }
+  return uniqueStringList(contextParts.filter(Boolean));
+}
+
+function buildSessionContextDescription(session) {
+  return buildSessionContextFacts(session).join(' · ');
+}
+
 function changeRiskBadges(change) {
   return uniqueStringList([
     change?.protectedBranch ? 'Protected branch' : '',
@@ -752,7 +813,15 @@ function changeRiskBadges(change) {
 }
 
 function buildSessionCompactDescription(session) {
+  if (session.activityKind === 'blocked') {
+    return buildSessionStatusDescription(session);
+  }
+
   const descriptionParts = [sessionStatusLabel(session)];
+  const providerLabel = sessionProviderLabel(session);
+  if (providerLabel) {
+    descriptionParts.push(providerLabel);
+  }
   const fileCountLabel = sessionFileCountLabel(session);
   if (fileCountLabel) {
     descriptionParts.push(fileCountLabel);
@@ -853,26 +922,41 @@ function buildRepoTooltip(repoRoot, summary) {
 }
 
 function buildOverviewItems(summary) {
-  return [
-    new DetailItem('Agents', [
-      formatShortCountLabel(summary?.workingCount || 0, 'working'),
-      formatShortCountLabel(summary?.idleCount || 0, 'thinking'),
-    ].join(' · '), {
-      iconId: 'git-branch',
+  const items = [
+    new DetailItem(`Working ${summary?.workingCount || 0}`, '', {
+      iconId: 'loading~spin',
+      tooltip: formatCountLabel(summary?.workingCount || 0, 'working agent'),
     }),
-    new DetailItem('Files', [
-      formatShortCountLabel(summary?.unassignedChangeCount || 0, 'unassigned'),
-      formatShortCountLabel(summary?.lockedFileCount || 0, 'locked'),
-    ].join(' · '), {
+    new DetailItem(`Idle ${summary?.idleCount || 0}`, '', {
+      iconId: 'comment-discussion',
+      tooltip: formatCountLabel(summary?.idleCount || 0, 'idle agent'),
+    }),
+    new DetailItem(`Locked ${summary?.lockedFileCount || 0}`, '', {
+      iconId: 'lock',
+      iconColorId: (summary?.lockedFileCount || 0) > 0
+        ? 'gitDecoration.modifiedResourceForeground'
+        : 'descriptionForeground',
+      tooltip: formatCountLabel(summary?.lockedFileCount || 0, 'locked file'),
+    }),
+    new DetailItem(`Conflicts ${summary?.conflictCount || 0}`, '', {
+      iconId: 'warning',
+      iconColorId: (summary?.conflictCount || 0) > 0
+        ? 'list.errorForeground'
+        : 'descriptionForeground',
+      tooltip: formatCountLabel(summary?.conflictCount || 0, 'conflict', 'conflicts'),
+    }),
+    new DetailItem(`Unassigned ${summary?.unassignedChangeCount || 0}`, '', {
       iconId: 'files',
-    }),
-    new DetailItem('State', [
-      formatShortCountLabel(summary?.conflictCount || 0, 'conflict', 'conflicts'),
-      summary?.deadCount ? formatShortCountLabel(summary.deadCount, 'dead') : '',
-    ].filter(Boolean).join(' · '), {
-      iconId: summary?.conflictCount ? 'warning' : 'pulse',
+      tooltip: formatCountLabel(summary?.unassignedChangeCount || 0, 'unassigned change'),
     }),
   ];
+  if (summary?.deadCount) {
+    items.push(new DetailItem(`Dead ${summary.deadCount}`, '', {
+      iconId: 'error',
+      tooltip: formatCountLabel(summary.deadCount, 'dead agent'),
+    }));
+  }
+  return items;
 }
 
 function sessionSnapshotKey(session) {
@@ -1255,8 +1339,9 @@ class SectionItem extends vscode.TreeItem {
       : vscode.TreeItemCollapsibleState.None;
     super(label, collapsibleState);
     this.items = items;
-    this.description = options.description
-      || (items.length > 0 ? String(items.length) : '');
+    this.description = Object.prototype.hasOwnProperty.call(options, 'description')
+      ? options.description
+      : (items.length > 0 ? String(items.length) : '');
     this.tooltip = options.tooltip || [label, this.description].filter(Boolean).join('\n');
     this.iconPath = options.iconId ? themeIcon(options.iconId, options.iconColorId) : undefined;
     this.contextValue = 'gitguardex.section';
@@ -1325,7 +1410,12 @@ class SessionItem extends vscode.TreeItem {
       ? buildRawSessionDescription(session)
       : buildSessionCardDescription(session);
     this.tooltip = buildSessionTooltip(session, this.description);
-    this.iconPath = themeIcon(resolveSessionActivityIconId(session.activityKind));
+    this.iconPath = themeIcon(
+      resolveSessionActivityIconId(session.activityKind),
+      session.activityKind === 'blocked'
+        ? 'list.errorForeground'
+        : undefined,
+    );
     this.contextValue = 'gitguardex.session';
     this.command = {
       command: 'gitguardex.activeAgents.openWorktree',
@@ -2493,6 +2583,8 @@ function commitWorktree(worktreePath, message) {
 }
 
 function buildSessionDetailItems(session) {
+  const statusFacts = buildSessionStatusFacts(session);
+  const contextFacts = buildSessionContextFacts(session);
   const snapshot = sessionSnapshotDisplayName(session);
   const projectRelativePath = resolveSessionProjectRelativePath(session);
   const badgeSummary = uniqueStringList([
@@ -2500,38 +2592,72 @@ function buildSessionDetailItems(session) {
     session.deltaLabel || '',
   ].filter(Boolean)).join(', ');
   const sessionHealthSummary = buildSessionHealthSummary(session);
-  const items = [
-    ...buildSessionFileGroupItems(session),
-  ];
-  if (badgeSummary) {
-    items.push(new DetailItem('Signals', badgeSummary, {
-      iconId: 'warning',
-    }));
-  }
-  if (sessionHealthSummary) {
-    items.push(new DetailItem('Session health', sessionHealthSummary, {
-      iconId: 'pulse',
-      tooltip: buildSessionHealthTooltip(session) || sessionHealthSummary,
-    }));
-  }
-  if (snapshot) {
-    items.push(new DetailItem('Snapshot', snapshot, {
-      iconId: 'account',
-    }));
-  }
-  if (projectRelativePath) {
-    items.push(new DetailItem('Project', projectRelativePath, {
+  const locationItems = [
+    new DetailItem('Branch', session.branch, {
+      iconId: 'git-branch',
+      tooltip: session.branch,
+    }),
+    new DetailItem('Worktree', session.worktreePath, {
       iconId: 'folder',
-      tooltip: projectRelativePath,
+      tooltip: session.worktreePath,
+    }),
+  ].filter((item) => Boolean(item.description));
+  const items = [];
+
+  if (statusFacts.length > 0) {
+    const statusItems = statusFacts.map((fact) => new DetailItem(fact));
+    if (badgeSummary) {
+      statusItems.push(new DetailItem('Signals', badgeSummary, {
+        iconId: 'warning',
+      }));
+    }
+    items.push(new SectionItem('Status', statusItems, {
+      description: statusFacts.join(' · '),
+      iconId: 'warning',
+      iconColorId: session.activityKind === 'blocked'
+        ? 'list.errorForeground'
+        : 'list.warningForeground',
+      collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+      tooltip: statusFacts.join('\n'),
     }));
   }
-  items.push(new DetailItem('Branch', session.branch, {
-    iconId: 'git-branch',
-  }));
-  items.push(new DetailItem('Worktree', session.worktreePath, {
-    iconId: 'folder',
-    tooltip: session.worktreePath,
-  }));
+
+  if (contextFacts.length > 0) {
+    const contextItems = contextFacts.map((fact) => new DetailItem(fact));
+    if (sessionHealthSummary) {
+      contextItems.push(new DetailItem('Session health', sessionHealthSummary, {
+        iconId: 'pulse',
+        tooltip: buildSessionHealthTooltip(session) || sessionHealthSummary,
+      }));
+    }
+    if (snapshot) {
+      contextItems.push(new DetailItem('Snapshot', snapshot, {
+        iconId: 'account',
+      }));
+    }
+    if (projectRelativePath) {
+      contextItems.push(new DetailItem('Project', projectRelativePath, {
+        iconId: 'folder',
+        tooltip: projectRelativePath,
+      }));
+    }
+    items.push(new SectionItem('Context', contextItems, {
+      description: contextFacts.join(' · '),
+      iconId: 'account',
+      collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+      tooltip: contextFacts.join('\n'),
+    }));
+  }
+
+  if (locationItems.length > 0) {
+    items.push(new SectionItem('Location', locationItems, {
+      description: compactBranchLabel(session.branch) || session.branch || '',
+      iconId: 'folder',
+      collapsedState: vscode.TreeItemCollapsibleState.Collapsed,
+      tooltip: [session.branch, session.worktreePath].filter(Boolean).join('\n'),
+    }));
+  }
+
   return items;
 }
 
@@ -2802,14 +2928,12 @@ class ActiveAgentsProvider {
 
   async getChildren(element) {
     if (element instanceof RepoItem) {
+      const overviewItems = buildOverviewItems(element.overview);
       const sectionItems = [
-        new SectionItem('Overview', [
-          new DetailItem('Summary', buildOverviewDescription(element.overview), {
-            iconId: 'graph',
-            tooltip: buildRepoTooltip(element.repoRoot, element.overview),
-          }),
-        ], {
-          description: '1',
+        new SectionItem('Overview', overviewItems, {
+          description: '',
+          iconId: 'graph',
+          tooltip: buildRepoTooltip(element.repoRoot, element.overview),
         }),
       ];
 
