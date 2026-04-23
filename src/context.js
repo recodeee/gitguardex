@@ -129,6 +129,14 @@ const TEMPLATE_FILES = [
   'vscode/guardex-active-agents/session-schema.js',
   'vscode/guardex-active-agents/README.md',
   'vscode/guardex-active-agents/icon.png',
+  'vscode/guardex-active-agents/fileicons/gitguardex-fileicons.json',
+  'vscode/guardex-active-agents/fileicons/icons/agent.svg',
+  'vscode/guardex-active-agents/fileicons/icons/branch.svg',
+  'vscode/guardex-active-agents/fileicons/icons/config.svg',
+  'vscode/guardex-active-agents/fileicons/icons/hook.svg',
+  'vscode/guardex-active-agents/fileicons/icons/openspec.svg',
+  'vscode/guardex-active-agents/fileicons/icons/plan.svg',
+  'vscode/guardex-active-agents/fileicons/icons/spec.svg',
 ];
 
 const PACKAGE_ROOT_SOURCE_OVERRIDES = new Set([
@@ -139,6 +147,14 @@ const PACKAGE_ROOT_SOURCE_OVERRIDES = new Set([
   'vscode/guardex-active-agents/session-schema.js',
   'vscode/guardex-active-agents/README.md',
   'vscode/guardex-active-agents/icon.png',
+  'vscode/guardex-active-agents/fileicons/gitguardex-fileicons.json',
+  'vscode/guardex-active-agents/fileicons/icons/agent.svg',
+  'vscode/guardex-active-agents/fileicons/icons/branch.svg',
+  'vscode/guardex-active-agents/fileicons/icons/config.svg',
+  'vscode/guardex-active-agents/fileicons/icons/hook.svg',
+  'vscode/guardex-active-agents/fileicons/icons/openspec.svg',
+  'vscode/guardex-active-agents/fileicons/icons/plan.svg',
+  'vscode/guardex-active-agents/fileicons/icons/spec.svg',
 ]);
 
 const LEGACY_WORKFLOW_SHIM_SPECS = [
