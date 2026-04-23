@@ -708,6 +708,12 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.27
+- Bumped `@imdeadpool/guardex` from `7.0.26` to `7.0.27` so npm can publish a fresh version after `7.0.26` was already taken on the registry.
+- The shipped `agent-branch-start.sh` copies now keep the startup auto-transfer path alive under `set -o pipefail`, so Guardex can still restore moved changes back to the protected checkout when branch startup hits a later failure.
+- The shipped `agent-branch-finish.sh` copies now keep PR-only finish runs from opening temporary integration repos, so maintainers can finish directly through the existing PR lane without extra temp-repo churn.
+- Keep the release scoped to version metadata for the already-merged `main` payload; no additional runtime behavior changes are introduced in this release lane.
+
 ### v7.0.26
 - Bumped `@imdeadpool/guardex` from `7.0.25` to `7.0.26` so npm can publish a fresh version after `v7.0.25` reached GitHub Releases while the registry stayed on `7.0.24`.
 - README now documents both `npx skills add recodee/` and `npx skills add recodee/gitguardex`, clarifies that the global Guardex npm install does not auto-run the generic skills installer, and explains why the picker shows `gitguardex` instead of a separate `guardex` skill.
