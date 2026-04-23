@@ -6,6 +6,8 @@ const {
   LEGACY_NAMES,
   GUARDEX_REPO_TOGGLE_ENV,
   CLI_COMMAND_DESCRIPTIONS,
+  CLI_COMMAND_GROUPS,
+  CLI_QUICKSTART_STEPS,
   AGENT_BOT_DESCRIPTIONS,
   DOCTOR_AUTO_FINISH_DETAIL_LIMIT,
   DOCTOR_AUTO_FINISH_BRANCH_LABEL_MAX,
@@ -166,6 +168,41 @@ function commandCatalogLines(indent = '  ') {
   );
 }
 
+// groupedCommandCatalogLines renders CLI_COMMAND_GROUPS as a nested list with
+// group headers separated by blank lines. It accepts an optional `colorize`
+// callback so the caller can decide whether to decorate the group label (tty
+// mode) or leave it plain (non-tty / NO_COLOR). Returns an array of lines;
+// `null` entries mean "emit a blank line" so tree renderers can echo pipe
+// characters on the separator rows.
+function groupedCommandCatalogLines(indent = '  ', options = {}) {
+  const colorizeLabel = typeof options.colorizeLabel === 'function'
+    ? options.colorizeLabel
+    : (text) => text;
+  const maxCommandLength = CLI_COMMAND_DESCRIPTIONS.reduce(
+    (max, [command]) => Math.max(max, command.length),
+    0,
+  );
+  const lines = [];
+  for (let groupIndex = 0; groupIndex < CLI_COMMAND_GROUPS.length; groupIndex += 1) {
+    const group = CLI_COMMAND_GROUPS[groupIndex];
+    const header = group.description
+      ? `${colorizeLabel(group.label)} — ${group.description}`
+      : colorizeLabel(group.label);
+    lines.push(`${indent}${header}`);
+    for (const [command, description] of group.commands) {
+      lines.push(`${indent}  ${command.padEnd(maxCommandLength + 2)}${description}`);
+    }
+    if (groupIndex < CLI_COMMAND_GROUPS.length - 1) {
+      lines.push(null);
+    }
+  }
+  return lines;
+}
+
+function quickstartLines(indent = '  ') {
+  return CLI_QUICKSTART_STEPS.map((step, index) => `${indent}${index + 1}. ${step}`);
+}
+
 function agentBotCatalogLines(indent = '  ') {
   const maxCommandLength = AGENT_BOT_DESCRIPTIONS.reduce(
     (max, [command]) => Math.max(max, command.length),
@@ -184,17 +221,22 @@ function repoToggleLines(indent = '  ') {
 
 function printToolLogsSummary() {
   const usageLine = `    $ ${SHORT_TOOL_NAME} <command> [options]`;
-  const commandDetails = commandCatalogLines('    ');
+  const quickstartDetails = quickstartLines('    ');
   const agentBotDetails = agentBotCatalogLines('    ');
   const repoToggleDetails = repoToggleLines('    ');
 
   if (!supportsAnsiColors()) {
+    const commandDetails = groupedCommandCatalogLines('    ');
     console.log(`${TOOL_NAME}-tools logs:`);
     console.log('  USAGE');
     console.log(usageLine);
+    console.log('  QUICKSTART');
+    for (const line of quickstartDetails) {
+      console.log(line);
+    }
     console.log('  COMMANDS');
     for (const line of commandDetails) {
-      console.log(line);
+      console.log(line ?? '');
     }
     console.log('  AGENT BOT');
     for (const line of agentBotDetails) {
@@ -209,19 +251,27 @@ function printToolLogsSummary() {
 
   const title = colorize(`${TOOL_NAME}-tools logs`, '1;36');
   const usageHeader = colorize('USAGE', '1');
+  const quickstartHeader = colorize('QUICKSTART', '1');
   const commandsHeader = colorize('COMMANDS', '1');
   const agentBotHeader = colorize('AGENT BOT', '1');
   const repoToggleHeader = colorize('REPO TOGGLE', '1');
   const pipe = colorize('│', '90');
   const tee = colorize('├', '90');
   const corner = colorize('└', '90');
+  const commandDetails = groupedCommandCatalogLines('    ', {
+    colorizeLabel: (text) => colorize(text, '1;36'),
+  });
 
   console.log(`${title}:`);
   console.log(`  ${tee}─ ${usageHeader}`);
   console.log(`  ${pipe}${usageLine}`);
+  console.log(`  ${tee}─ ${quickstartHeader}`);
+  for (const line of quickstartDetails) {
+    console.log(`  ${pipe}${line.slice(2)}`);
+  }
   console.log(`  ${tee}─ ${commandsHeader}`);
   for (const line of commandDetails) {
-    if (!line) {
+    if (line == null) {
       console.log(`  ${pipe}`);
       continue;
     }
@@ -249,6 +299,12 @@ function printToolLogsSummary() {
 function usage(options = {}) {
   const { outsideGitRepo = false } = options;
 
+  const groupedCommandLines = groupedCommandCatalogLines('  ', {
+    colorizeLabel: (text) => colorize(text, '1;36'),
+  })
+    .map((line) => (line == null ? '' : line))
+    .join('\n');
+
   console.log(`A command-line tool that sets up hardened multi-agent safety for git repositories.
 
 VERSION
@@ -257,8 +313,11 @@ VERSION
 USAGE
   $ ${SHORT_TOOL_NAME} <command> [options]
 
+QUICKSTART
+${quickstartLines().join('\n')}
+
 COMMANDS
-${commandCatalogLines().join('\n')}
+${groupedCommandLines}
 
 AGENT BOT
 ${agentBotCatalogLines().join('\n')}

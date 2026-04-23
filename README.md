@@ -708,6 +708,12 @@ npm pack --dry-run
 <details>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.28
+- Bumped `@imdeadpool/guardex` from `7.0.27` to `7.0.28` so the CLI help redesign can ship on a fresh npm version.
+- `gx --help` and `gx` (no args) now render commands as a grouped catalog (Setup & health / Branch workflow / Coordination / Agents & reports / Meta) with short group descriptions, so the top of the help screen shows the newcomer path instead of a flat 20-row list.
+- Added a three-step Quickstart block (`gx setup` → `gx branch start "<task>" "<agent>"` → `gx branch finish --via-pr --wait-for-merge --cleanup`) to both help surfaces so the intended install/setup sequence is visible before the full command reference.
+- Exposed `CLI_COMMAND_GROUPS` and `CLI_QUICKSTART_STEPS` from `src/context.js` (with `CLI_COMMAND_DESCRIPTIONS` derived from the grouped source of truth), giving future help tooling and integrations a structured way to iterate the catalog without re-parsing flat rows.
+
 ### v7.0.27
 - Bumped `@imdeadpool/guardex` from `7.0.26` to `7.0.27` so npm can publish a fresh version after `7.0.26` was already taken on the registry.
 - The shipped `agent-branch-start.sh` copies now keep the startup auto-transfer path alive under `set -o pipefail`, so Guardex can still restore moved changes back to the protected checkout when branch startup hits a later failure.

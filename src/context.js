@@ -363,27 +363,68 @@ const SUGGESTIBLE_COMMANDS = [
   'print-agents-snippet',
   'release',
 ];
-const CLI_COMMAND_DESCRIPTIONS = [
-  ['status', 'Show GitGuardex CLI + service health without modifying files'],
-  ['setup', 'Install, repair, and verify guardrails (flags: --repair, --install-only, --target, --current)'],
-  ['doctor', 'Repair drift + verify (flags: --target, --current; auto-sandboxes on protected main)'],
-  ['branch', 'CLI-owned branch workflow surface (start/finish/merge)'],
-  ['locks', 'CLI-owned file lock surface (claim/allow-delete/release/status/validate)'],
-  ['worktree', 'CLI-owned worktree cleanup surface (prune)'],
-  ['hook', 'Hook dispatch/install surface used by managed shims'],
-  ['migrate', 'Convert legacy repo-local installs to the zero-copy CLI-owned surface'],
-  ['install-agent-skills', 'Install Guardex Codex/Claude skills into the user home'],
-  ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
-  ['merge', 'Create/reuse an integration lane and merge overlapping agent branches'],
-  ['sync', 'Sync agent branches with origin/<base>'],
-  ['finish', 'Commit + PR + merge completed agent branches (--all, --branch)'],
-  ['cleanup', 'Prune merged/stale agent branches and worktrees'],
-  ['release', 'Create or update the current GitHub release with README-generated notes'],
-  ['agents', 'Start/stop repo-scoped review + cleanup bots'],
-  ['prompt', 'Print AI setup checklist or named slices (--exec, --part, --list-parts, --snippet)'],
-  ['report', 'Security/safety reports (e.g. OpenSSF scorecard, session severity)'],
-  ['help', 'Show this help output'],
-  ['version', 'Print GitGuardex version'],
+// CLI_COMMAND_GROUPS is the grouped source of truth the `gx --help` /
+// `gx` no-args renderer uses. Each group is ordered roughly by how often a
+// user reaches for it so the help screen answers "what do I run first?"
+// before "what else can this do?". CLI_COMMAND_DESCRIPTIONS preserves the
+// flat export for callers that still want the ungrouped list.
+const CLI_COMMAND_GROUPS = [
+  {
+    label: 'Setup & health',
+    description: 'Install, repair, and check a repo. Run these first on a new clone.',
+    commands: [
+      ['setup', 'Install, repair, and verify guardrails (flags: --repair, --install-only, --target, --current)'],
+      ['doctor', 'Repair drift + verify (flags: --target, --current; auto-sandboxes on protected main)'],
+      ['status', 'Show GitGuardex CLI + service health without modifying files'],
+      ['migrate', 'Convert legacy repo-local installs to the zero-copy CLI-owned surface'],
+    ],
+  },
+  {
+    label: 'Branch workflow',
+    description: 'The sandbox → commit → PR → merge loop for agent-owned branches.',
+    commands: [
+      ['branch', 'CLI-owned branch workflow surface (start/finish/merge)'],
+      ['finish', 'Commit + PR + merge completed agent branches (--all, --branch)'],
+      ['merge', 'Create/reuse an integration lane and merge overlapping agent branches'],
+      ['sync', 'Sync agent branches with origin/<base>'],
+      ['cleanup', 'Prune merged/stale agent branches and worktrees'],
+    ],
+  },
+  {
+    label: 'Coordination',
+    description: 'File locks, worktrees, hooks, and protected-branch policy.',
+    commands: [
+      ['locks', 'CLI-owned file lock surface (claim/allow-delete/release/status/validate)'],
+      ['worktree', 'CLI-owned worktree cleanup surface (prune)'],
+      ['hook', 'Hook dispatch/install surface used by managed shims'],
+      ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
+    ],
+  },
+  {
+    label: 'Agents & reports',
+    description: 'Review / cleanup bots, AI setup prompts, and safety reports.',
+    commands: [
+      ['agents', 'Start/stop repo-scoped review + cleanup bots'],
+      ['install-agent-skills', 'Install Guardex Codex/Claude skills into the user home'],
+      ['prompt', 'Print AI setup checklist or named slices (--exec, --part, --list-parts, --snippet)'],
+      ['report', 'Security/safety reports (e.g. OpenSSF scorecard, session severity)'],
+      ['release', 'Create or update the current GitHub release with README-generated notes'],
+    ],
+  },
+  {
+    label: 'Meta',
+    description: 'Version + help.',
+    commands: [
+      ['help', 'Show this help output'],
+      ['version', 'Print GitGuardex version'],
+    ],
+  },
+];
+const CLI_COMMAND_DESCRIPTIONS = CLI_COMMAND_GROUPS.flatMap((group) => group.commands);
+const CLI_QUICKSTART_STEPS = [
+  'gx setup',
+  'gx branch start "<task>" "<agent>"',
+  'gx branch finish --via-pr --wait-for-merge --cleanup',
 ];
 const DEPRECATED_COMMAND_ALIASES = new Map([
   ['init', { target: 'setup', hint: 'gx setup' }],
@@ -686,6 +727,8 @@ module.exports = {
   COMMAND_TYPO_ALIASES,
   SUGGESTIBLE_COMMANDS,
   CLI_COMMAND_DESCRIPTIONS,
+  CLI_COMMAND_GROUPS,
+  CLI_QUICKSTART_STEPS,
   DEPRECATED_COMMAND_ALIASES,
   AGENT_BOT_DESCRIPTIONS,
   DOCTOR_AUTO_FINISH_DETAIL_LIMIT,
