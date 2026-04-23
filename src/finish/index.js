@@ -521,4 +521,5 @@ module.exports = {
   merge,
   finish,
   sync,
+  autoCommitWorktreeForFinish,
 };

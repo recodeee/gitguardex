@@ -31,6 +31,7 @@ const {
 } = require('../sandbox');
 const { ensureOmxScaffold, configureHooks } = require('../scaffold');
 const { detectRecoverableAutoFinishConflict, printAutoFinishSummary } = require('../output');
+const { autoCommitWorktreeForFinish } = require('../finish');
 
 /**
  * @typedef {Object} SandboxMetadata
@@ -887,23 +888,25 @@ function autoFinishReadyAgentBranches(repoRoot, options = {}) {
     return summary;
   }
 
-  if (!hasOriginRemote(repoRoot)) {
-    summary.enabled = false;
-    summary.details.push('Skipped auto-finish sweep (origin remote missing).');
-    return summary;
-  }
+  const originAvailable = hasOriginRemote(repoRoot);
   const explicitGhBin = Boolean(String(process.env.GUARDEX_GH_BIN || '').trim());
-  if (!explicitGhBin && !originRemoteLooksLikeGithub(repoRoot)) {
-    summary.enabled = false;
-    summary.details.push('Skipped auto-finish sweep (origin remote is not GitHub).');
-    return summary;
-  }
-
   const ghBin = process.env.GUARDEX_GH_BIN || 'gh';
-  if (run(ghBin, ['--version']).status !== 0) {
-    summary.enabled = false;
-    summary.details.push(`Skipped auto-finish sweep (${ghBin} not available).`);
-    return summary;
+  const ghAvailable =
+    originAvailable &&
+    (explicitGhBin || originRemoteLooksLikeGithub(repoRoot)) &&
+    run(ghBin, ['--version']).status === 0;
+
+  let fallbackMode = '';
+  if (!originAvailable) {
+    fallbackMode = 'local';
+    summary.details.push('origin remote missing; falling back to local direct merge (no push, no PR).');
+  } else if (!ghAvailable) {
+    fallbackMode = 'direct';
+    if (!explicitGhBin && !originRemoteLooksLikeGithub(repoRoot)) {
+      summary.details.push('origin remote is not GitHub; falling back to direct merge + push.');
+    } else {
+      summary.details.push(`${ghBin} not available; falling back to direct merge + push.`);
+    }
   }
 
   const branchWorktrees = mapWorktreePathsByBranch(repoRoot);
@@ -936,16 +939,29 @@ function autoFinishReadyAgentBranches(repoRoot, options = {}) {
       continue;
     }
 
+    const branchWorktree = branchWorktrees.get(branch) || '';
+    if (branchWorktree && hasSignificantWorkingTreeChanges(branchWorktree)) {
+      try {
+        const commitResult = autoCommitWorktreeForFinish(repoRoot, branchWorktree, branch, {});
+        if (commitResult.committed) {
+          counts = aheadBehind(repoRoot, branch, baseBranch);
+        }
+      } catch (error) {
+        summary.failed += 1;
+        summary.details.push(`[fail] ${branch}: auto-commit failed (${error.message}).`);
+        continue;
+      }
+    }
+
     if (counts.ahead <= 0) {
       summary.skipped += 1;
       summary.details.push(`[skip] ${branch}: already merged into ${baseBranch}.`);
       continue;
     }
 
-    const branchWorktree = branchWorktrees.get(branch) || '';
     if (branchWorktree && hasSignificantWorkingTreeChanges(branchWorktree)) {
       summary.skipped += 1;
-      summary.details.push(`[skip] ${branch}: dirty worktree (${branchWorktree}).`);
+      summary.details.push(`[skip] ${branch}: dirty worktree after auto-commit (${branchWorktree}).`);
       continue;
     }
 
@@ -955,10 +971,16 @@ function autoFinishReadyAgentBranches(repoRoot, options = {}) {
       branch,
       '--base',
       baseBranch,
-      '--via-pr',
-      waitForMerge ? '--wait-for-merge' : '--no-wait-for-merge',
-      '--cleanup',
     ];
+    if (fallbackMode === 'local') {
+      finishArgs.push('--direct-only', '--no-push');
+    } else if (fallbackMode === 'direct') {
+      finishArgs.push('--direct-only');
+    } else {
+      finishArgs.push('--via-pr');
+    }
+    finishArgs.push(waitForMerge ? '--wait-for-merge' : '--no-wait-for-merge');
+    finishArgs.push('--cleanup');
     const finishResult = runPackageAsset('branchFinish', finishArgs, { cwd: repoRoot });
     const combinedOutput = [finishResult.stdout || '', finishResult.stderr || ''].join('\n').trim();
 

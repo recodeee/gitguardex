@@ -527,6 +527,100 @@ exit 1
 });
 
 
+test('doctor auto-finish falls back to local direct merge when origin remote is missing', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  commitAll(repoDir, 'apply gx setup', { allowProtectedBaseWrite: true });
+
+  const taskName = 'doctor-local-fallback';
+  const fileName = `${taskName}.txt`;
+  result = runBranchStart([taskName, 'planner', 'main'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const readyBranch = extractCreatedBranch(result.stdout);
+  const readyWorktree = extractCreatedWorktree(result.stdout);
+
+  fs.writeFileSync(path.join(readyWorktree, fileName), 'local-only merge payload\n', 'utf8');
+  result = runHumanCmd('git', ['add', fileName], readyWorktree);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runHumanCmd('git', ['commit', '--no-verify', '-m', 'local-only finish change'], readyWorktree);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const missingGhPath = path.join(repoDir, 'no-such-gh-binary-for-doctor-local-fallback');
+  result = runNodeWithEnv(
+    ['doctor', '--target', repoDir, '--allow-protected-base-write'],
+    repoDir,
+    { GUARDEX_GH_BIN: missingGhPath },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  assert.match(combinedOutput, /origin remote missing; falling back to local direct merge/);
+  assert.match(
+    combinedOutput,
+    /Auto-finish sweep \(base=main\): attempted=1, completed=1, skipped=\d+, failed=0/,
+  );
+  assert.match(
+    combinedOutput,
+    new RegExp(`\\[done\\] ${escapeRegexLiteral(readyBranch)}: auto-finish completed\\.`),
+  );
+
+  result = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${readyBranch}`], repoDir);
+  assert.notEqual(result.status, 0, 'doctor local fallback should delete the merged agent branch');
+  assert.equal(fs.existsSync(readyWorktree), false, 'doctor local fallback should remove the agent worktree');
+
+  const mergedFile = path.join(repoDir, fileName);
+  assert.equal(fs.existsSync(mergedFile), true, 'merged payload should land on the local base branch');
+});
+
+
+test('doctor auto-commits a dirty agent worktree before local fallback merge', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  commitAll(repoDir, 'apply gx setup', { allowProtectedBaseWrite: true });
+
+  const taskName = 'doctor-local-autocommit';
+  const fileName = `${taskName}.txt`;
+  result = runBranchStart([taskName, 'planner', 'main'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const readyBranch = extractCreatedBranch(result.stdout);
+  const readyWorktree = extractCreatedWorktree(result.stdout);
+
+  fs.writeFileSync(path.join(readyWorktree, fileName), 'uncommitted payload\n', 'utf8');
+
+  const missingGhPath = path.join(repoDir, 'no-such-gh-binary-for-doctor-local-autocommit');
+  result = runNodeWithEnv(
+    ['doctor', '--target', repoDir, '--allow-protected-base-write'],
+    repoDir,
+    { GUARDEX_GH_BIN: missingGhPath },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const combinedOutput = `${result.stdout}\n${result.stderr}`;
+  assert.match(combinedOutput, /origin remote missing; falling back to local direct merge/);
+  assert.match(
+    combinedOutput,
+    /Auto-finish sweep \(base=main\): attempted=1, completed=1, skipped=\d+, failed=0/,
+  );
+  assert.match(
+    combinedOutput,
+    new RegExp(`\\[done\\] ${escapeRegexLiteral(readyBranch)}: auto-finish completed\\.`),
+  );
+
+  result = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${readyBranch}`], repoDir);
+  assert.notEqual(result.status, 0, 'doctor local fallback should delete the merged agent branch');
+  assert.equal(fs.existsSync(readyWorktree), false, 'doctor local fallback should remove the agent worktree');
+
+  const mergedFile = path.join(repoDir, fileName);
+  assert.equal(fs.existsSync(mergedFile), true, 'auto-committed payload should land on the local base branch');
+});
+
+
 test('doctor forwards --no-wait-for-merge into the auto-finish sweep', () => {
   const repoDir = initRepoOnBranch('main');
   seedCommit(repoDir);
