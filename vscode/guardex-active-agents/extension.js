@@ -56,6 +56,18 @@ const SESSION_ACTIVITY_ICON_IDS = {
   stalled: 'clock',
   dead: 'error',
 };
+const SESSION_PROVIDER_BRANDS = {
+  openai: {
+    id: 'openai',
+    label: 'OpenAI',
+    badge: 'AI',
+  },
+  claude: {
+    id: 'claude',
+    label: 'Claude',
+    badge: 'CL',
+  },
+};
 
 function sessionDecorationUri(branch) {
   return vscode.Uri.parse(`${SESSION_DECORATION_SCHEME}://${sanitizeBranchForFile(branch)}`);
@@ -132,6 +144,84 @@ function uniqueStringList(values) {
   }
 
   return result;
+}
+
+function normalizeSessionProviderToken(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function resolveSessionProvider(session) {
+  const signals = [
+    session?.cliName,
+    session?.agentName,
+    session?.branch,
+  ]
+    .map(normalizeSessionProviderToken)
+    .filter(Boolean);
+
+  if (signals.some((value) => value.includes('claude'))) {
+    return {
+      ...SESSION_PROVIDER_BRANDS.claude,
+      cliName: typeof session?.cliName === 'string' ? session.cliName.trim() : '',
+    };
+  }
+  if (signals.some((value) => value.includes('codex') || value.includes('openai'))) {
+    return {
+      ...SESSION_PROVIDER_BRANDS.openai,
+      cliName: typeof session?.cliName === 'string' ? session.cliName.trim() : '',
+    };
+  }
+  return null;
+}
+
+function sessionProviderDecoration(session) {
+  const provider = resolveSessionProvider(session);
+  if (!provider) {
+    return undefined;
+  }
+
+  const cliName = provider.cliName || provider.id;
+  return {
+    badge: provider.badge,
+    tooltip: `${provider.label} session via ${cliName}`,
+  };
+}
+
+function normalizeSnapshotIdentityValue(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function sessionSnapshotDisplayName(session) {
+  return normalizeSnapshotIdentityValue(session?.snapshotName)
+    || normalizeSnapshotIdentityValue(session?.snapshotEmail);
+}
+
+function sessionSnapshotBadge(session) {
+  const displayName = sessionSnapshotDisplayName(session);
+  const match = displayName.match(/[a-z0-9]/i);
+  return match ? match[0].toUpperCase() : '';
+}
+
+function sessionSnapshotDescription(session) {
+  const displayName = sessionSnapshotDisplayName(session);
+  return displayName ? `snapshot ${displayName}` : '';
+}
+
+function sessionSnapshotDecoration(session) {
+  const badge = sessionSnapshotBadge(session);
+  const displayName = sessionSnapshotDisplayName(session);
+  if (!badge || !displayName) {
+    return undefined;
+  }
+
+  return {
+    badge,
+    tooltip: `Snapshot ${displayName}`,
+  };
+}
+
+function sessionIdentityDecoration(session) {
+  return sessionSnapshotDecoration(session) || sessionProviderDecoration(session);
 }
 
 function stringListsEqual(left, right) {
@@ -408,9 +498,12 @@ function changeRiskBadges(change) {
 }
 
 function buildSessionCardDescription(session) {
+  const provider = resolveSessionProvider(session);
+  const statusAgentLabel = `${sessionStatusLabel(session)}: ${session.agentName || 'agent'}`;
   const descriptionParts = [
-    session.agentName || 'agent',
-    sessionStatusLabel(session),
+    statusAgentLabel,
+    provider?.label ? `via ${provider.label}` : '',
+    sessionSnapshotDescription(session),
     session.deltaLabel || '',
     session.changeCount > 0 ? formatCountLabel(session.changeCount, 'changed file') : '',
     session.lockCount > 0 ? formatCountLabel(session.lockCount, 'lock') : '',
@@ -421,7 +514,16 @@ function buildSessionCardDescription(session) {
 }
 
 function buildRawSessionDescription(session) {
-  const descriptionParts = [session.activityLabel || 'thinking'];
+  const provider = resolveSessionProvider(session);
+  const status = sessionStatusLabel(session).toLowerCase();
+  const descriptionParts = [`${status}: ${session.agentName || 'agent'}`];
+  if (provider?.label) {
+    descriptionParts.push(provider.label);
+  }
+  const snapshot = sessionSnapshotDescription(session);
+  if (snapshot) {
+    descriptionParts.push(snapshot);
+  }
   if (session.activityCountLabel) {
     descriptionParts.push(session.activityCountLabel);
   }
@@ -433,6 +535,7 @@ function buildRawSessionDescription(session) {
 }
 
 function buildSessionTooltip(session, description) {
+  const provider = resolveSessionProvider(session);
   const riskSummary = uniqueStringList([
     ...(session?.riskBadges || []),
     session?.deltaLabel || '',
@@ -440,6 +543,10 @@ function buildSessionTooltip(session, description) {
   const topFiles = session?.topChangedFilesLabel || summarizeCompactPaths(session?.worktreeChangedPaths || []);
   return [
     session.branch,
+    provider?.label
+      ? `Provider ${provider.label}${provider.cliName ? ` (${provider.cliName})` : ''}`
+      : '',
+    sessionSnapshotDisplayName(session) ? `Snapshot ${sessionSnapshotDisplayName(session)}` : '',
     `${session.agentName} · ${session.taskName}`,
     `Status ${description}`,
     session.recentChangeSummary ? `Recent ${session.recentChangeSummary}` : '',
@@ -459,6 +566,23 @@ function buildUnassignedChangeDescription(change) {
     change.statusLabel,
     ...changeRiskBadges(change),
   ].filter(Boolean).join(' · ');
+}
+
+function buildWorktreeBranchDescription(sessions) {
+  const sessionList = Array.isArray(sessions) ? sessions : [];
+  const primarySession = sessionList[0] || null;
+  if (!primarySession) {
+    return '';
+  }
+
+  const descriptionParts = [
+    `${sessionStatusLabel(primarySession).toLowerCase()}: ${primarySession.agentName || 'agent'}`,
+    sessionSnapshotDescription(primarySession),
+  ];
+  if (sessionList.length > 1) {
+    descriptionParts.push(formatCountLabel(sessionList.length, 'agent'));
+  }
+  return descriptionParts.filter(Boolean).join(' · ');
 }
 
 function buildOverviewDescription(summary) {
@@ -812,7 +936,12 @@ class SessionDecorationProvider {
       };
     }
 
-    return sessionIdleDecoration(this.sessionsByUri.get(uri.toString()), this.nowProvider());
+    const session = this.sessionsByUri.get(uri.toString());
+    const idleDecoration = sessionIdleDecoration(session, this.nowProvider());
+    if (idleDecoration) {
+      return idleDecoration;
+    }
+    return sessionIdentityDecoration(session);
   }
 }
 
@@ -869,6 +998,7 @@ class WorktreeItem extends vscode.TreeItem {
   constructor(worktreePath, sessions, items = [], options = {}) {
     const normalizedWorktreePath = typeof worktreePath === 'string' ? worktreePath.trim() : '';
     const sessionList = Array.isArray(sessions) ? sessions : [];
+    const primarySession = options.resourceSession || sessionList[0] || null;
     const changedCount = Number.isInteger(options.changedCount)
       ? options.changedCount
       : sessionList.reduce((total, session) => total + (session.changeCount || 0), 0);
@@ -877,7 +1007,7 @@ class WorktreeItem extends vscode.TreeItem {
       descriptionParts.push(`${changedCount} changed`);
     }
     super(
-      path.basename(normalizedWorktreePath || '') || 'worktree',
+      options.label || path.basename(normalizedWorktreePath || '') || 'worktree',
       items.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
     );
     this.worktreePath = normalizedWorktreePath;
@@ -888,13 +1018,16 @@ class WorktreeItem extends vscode.TreeItem {
       normalizedWorktreePath,
       ...sessionList.map((session) => session.branch).filter(Boolean),
     ].filter(Boolean).join('\n');
-    this.iconPath = new vscode.ThemeIcon('folder');
+    this.iconPath = new vscode.ThemeIcon(options.iconId || 'folder');
+    if (options.useSessionDecoration && primarySession?.branch) {
+      this.resourceUri = sessionDecorationUri(primarySession.branch);
+    }
     this.contextValue = 'gitguardex.worktree';
-    if (sessionList[0]?.worktreePath) {
+    if (primarySession?.worktreePath) {
       this.command = {
         command: 'gitguardex.activeAgents.openWorktree',
         title: 'Open Agent Worktree',
-        arguments: [sessionList[0]],
+        arguments: [primarySession],
       };
     }
   }
@@ -1856,6 +1989,8 @@ function commitWorktree(worktreePath, message) {
 }
 
 function buildSessionDetailItems(session) {
+  const provider = resolveSessionProvider(session);
+  const snapshot = sessionSnapshotDisplayName(session);
   const items = [
     new DetailItem('Recent change', session.recentChangeSummary || 'No recent change summary.', {
       iconId: 'history',
@@ -1871,6 +2006,16 @@ function buildSessionDetailItems(session) {
       tooltip: session.worktreePath,
     }),
   ];
+  if (snapshot) {
+    items.splice(3, 0, new DetailItem('Snapshot', snapshot, {
+      iconId: 'account',
+    }));
+  }
+  if (provider?.label) {
+    items.splice(3, 0, new DetailItem('Provider', provider.label, {
+      iconId: 'sparkle',
+    }));
+  }
   const badgeSummary = uniqueStringList([
     ...(session.riskBadges || []),
     session.deltaLabel || '',
@@ -1923,6 +2068,12 @@ function buildRawActiveAgentGroupNodes(sessions) {
             variant: 'raw',
           },
         )),
+        {
+          description: buildWorktreeBranchDescription(worktreeSessions),
+          iconId: 'git-branch',
+          resourceSession: worktreeSessions[0],
+          useSessionDecoration: true,
+        },
       )
     ));
     if (worktreeItems.length > 0) {

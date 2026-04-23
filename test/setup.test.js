@@ -180,6 +180,14 @@ test('setup provisions workflow files and repo config', () => {
     'vscode/guardex-active-agents/extension.js',
     'vscode/guardex-active-agents/session-schema.js',
     'vscode/guardex-active-agents/icon.png',
+    'vscode/guardex-active-agents/fileicons/gitguardex-fileicons.json',
+    'vscode/guardex-active-agents/fileicons/icons/agent.svg',
+    'vscode/guardex-active-agents/fileicons/icons/branch.svg',
+    'vscode/guardex-active-agents/fileicons/icons/config.svg',
+    'vscode/guardex-active-agents/fileicons/icons/hook.svg',
+    'vscode/guardex-active-agents/fileicons/icons/openspec.svg',
+    'vscode/guardex-active-agents/fileicons/icons/plan.svg',
+    'vscode/guardex-active-agents/fileicons/icons/spec.svg',
   ];
   for (const relativePath of canonicalBundleFiles) {
     const installedPath = path.join(repoDir, relativePath);

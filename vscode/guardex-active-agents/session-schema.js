@@ -744,6 +744,8 @@ function buildSessionRecord(input) {
     taskName: toNonEmptyString(input.taskName, 'task'),
     latestTaskPreview: '',
     agentName: toNonEmptyString(input.agentName, 'agent'),
+    snapshotName: toNonEmptyString(input.snapshotName),
+    snapshotEmail: toNonEmptyString(input.snapshotEmail || input.email),
     worktreePath,
     pid,
     cliName: toNonEmptyString(input.cliName, 'codex'),
@@ -794,6 +796,8 @@ function normalizeSessionRecord(input, options = {}) {
     taskName: toNonEmptyString(input.taskName, 'task'),
     latestTaskPreview: '',
     agentName: toNonEmptyString(input.agentName, 'agent'),
+    snapshotName: toNonEmptyString(input.snapshotName),
+    snapshotEmail: toNonEmptyString(input.snapshotEmail || input.email),
     worktreePath: path.resolve(worktreePath),
     pid,
     cliName: toNonEmptyString(input.cliName, 'codex'),
@@ -915,7 +919,18 @@ function sortSessionsByTimestamp(sessions) {
 }
 
 function deriveLockTaskAnchor(entries, fallbackTaskName, fallbackTimestamp) {
-  const sortedEntries = [...entries].sort((left, right) => {
+  const sortedEntries = sortTelemetryEntriesForAnchor(entries);
+
+  const latestEntry = sortedEntries[0] || null;
+  return {
+    taskName: latestEntry?.taskPreview || fallbackTaskName || 'task',
+    latestTaskPreview: latestEntry?.taskPreview || '',
+    timestamp: latestEntry?.taskUpdatedAt || fallbackTimestamp || '',
+  };
+}
+
+function sortTelemetryEntriesForAnchor(entries) {
+  return [...entries].sort((left, right) => {
     const timeDelta = Date.parse(right.taskUpdatedAt || '') - Date.parse(left.taskUpdatedAt || '');
     if (timeDelta !== 0) {
       return timeDelta;
@@ -925,12 +940,14 @@ function deriveLockTaskAnchor(entries, fallbackTaskName, fallbackTimestamp) {
     }
     return (right.projectPath || '').localeCompare(left.projectPath || '');
   });
+}
 
-  const latestEntry = sortedEntries[0] || null;
+function deriveLockSnapshotIdentity(entries) {
+  const latestEntry = sortTelemetryEntriesForAnchor(entries)
+    .find((entry) => entry?.snapshotName || entry?.email) || null;
   return {
-    taskName: latestEntry?.taskPreview || fallbackTaskName || 'task',
-    latestTaskPreview: latestEntry?.taskPreview || '',
-    timestamp: latestEntry?.taskUpdatedAt || fallbackTimestamp || '',
+    snapshotName: toNonEmptyString(latestEntry?.snapshotName),
+    snapshotEmail: toNonEmptyString(latestEntry?.email),
   };
 }
 
@@ -944,6 +961,7 @@ function buildWorktreeLockSession(repoRoot, worktreePath, lockPayload, options =
     : `agent/telemetry/${path.basename(worktreePath)}`;
   const label = deriveSessionLabel(effectiveBranch, worktreePath);
   const taskAnchor = deriveLockTaskAnchor(telemetryEntries, label, telemetryUpdatedAt);
+  const snapshotIdentity = deriveLockSnapshotIdentity(telemetryEntries);
   const startedAt = taskAnchor.timestamp || telemetryUpdatedAt || new Date(now).toISOString();
 
   const session = {
@@ -953,6 +971,8 @@ function buildWorktreeLockSession(repoRoot, worktreePath, lockPayload, options =
     taskName: taskAnchor.taskName,
     latestTaskPreview: taskAnchor.latestTaskPreview,
     agentName: deriveAgentNameFromBranch(effectiveBranch),
+    snapshotName: snapshotIdentity.snapshotName,
+    snapshotEmail: snapshotIdentity.snapshotEmail,
     worktreePath: path.resolve(worktreePath),
     pid: null,
     cliName: 'codex',
@@ -995,6 +1015,8 @@ function buildManagedWorktreeSession(repoRoot, worktreePath, options = {}) {
     taskName: label,
     latestTaskPreview: '',
     agentName: deriveAgentNameFromBranch(branch),
+    snapshotName: '',
+    snapshotEmail: '',
     worktreePath: path.resolve(worktreePath),
     pid: null,
     cliName: 'gx',
