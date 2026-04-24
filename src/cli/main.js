@@ -656,7 +656,7 @@ function runSetupInSandbox(options, blocked, repoLabel = '') {
   const nestedResult = run(
     process.execPath,
     [__filename, ...buildSandboxSetupArgs(options, sandboxTarget)],
-    { cwd: metadata.worktreePath },
+    { cwd: metadata.worktreePath, env: { GUARDEX_DOCTOR_SANDBOX: '1' } },
   );
   if (isSpawnFailure(nestedResult)) {
     throw nestedResult.error;
@@ -700,6 +700,12 @@ function runSetupInSandbox(options, blocked, repoLabel = '') {
   } else if (autoFinishSummary.details.length > 0) {
     console.log(`[${TOOL_NAME}] ${autoFinishSummary.details[0]}`);
   }
+
+  const prunePayload = doctorModule.pruneStaleAgentWorktrees(scanResult.repoRoot, {
+    baseBranch: currentBaseBranch,
+    dryRun: syncOptions.dryRun,
+  });
+  printWorktreePruneSummary(prunePayload, { baseBranch: currentBaseBranch });
 
   const cleanupResult = cleanupProtectedBaseSandbox(blocked.repoRoot, metadata);
   console.log(
@@ -1755,6 +1761,26 @@ function runScanInternal(options) {
   };
 }
 
+function printWorktreePruneSummary(payload, options = {}) {
+  if (!payload || payload.enabled === false) {
+    if (payload && payload.details && payload.details[0]) {
+      console.log(`[${TOOL_NAME}] ${payload.details[0]}`);
+    }
+    return;
+  }
+  if (!payload.ran) {
+    return;
+  }
+  const baseLabel = options.baseBranch ? ` (base=${options.baseBranch})` : '';
+  const tag = payload.status === 'failed' ? '⚠️' : (payload.status === 'dry-run' ? '🔍' : '🧹');
+  console.log(
+    `[${TOOL_NAME}] ${tag} Stale agent-worktree prune${baseLabel}: status=${payload.status}`,
+  );
+  for (const detail of payload.details || []) {
+    console.log(`[${TOOL_NAME}]   ${detail}`);
+  }
+}
+
 function printScanResult(scan, json = false) {
   if (json) {
     process.stdout.write(
@@ -2369,6 +2395,12 @@ function doctor(rawArgs) {
       configureHooks,
       autoFinishReadyAgentBranches: doctorModule.autoFinishReadyAgentBranches,
     });
+    const primaryBaseBranch = currentBranchName(blocked.repoRoot);
+    const prunePayload = doctorModule.pruneStaleAgentWorktrees(blocked.repoRoot, {
+      baseBranch: primaryBaseBranch,
+      dryRun: singleRepoOptions.dryRun,
+    });
+    printWorktreePruneSummary(prunePayload, { baseBranch: primaryBaseBranch });
     return;
   }
 
@@ -2389,6 +2421,12 @@ function doctor(rawArgs) {
       baseBranch: currentBaseBranch,
       dryRun: singleRepoOptions.dryRun,
       waitForMerge: singleRepoOptions.waitForMerge,
+    });
+  const prunePayload = scanResult.guardexEnabled === false
+    ? { enabled: false, ran: false, status: 'skipped', details: ['Guardex disabled for this repo.'] }
+    : doctorModule.pruneStaleAgentWorktrees(scanResult.repoRoot, {
+      baseBranch: currentBaseBranch,
+      dryRun: singleRepoOptions.dryRun,
     });
   const safe = scanResult.guardexEnabled === false || (scanResult.errors === 0 && scanResult.warnings === 0);
   const musafe = safe;
@@ -2414,6 +2452,7 @@ function doctor(rawArgs) {
             findings: scanResult.findings,
           },
           autoFinish: autoFinishSummary,
+          worktreePrune: prunePayload,
         },
         null,
         2,
@@ -2434,6 +2473,7 @@ function doctor(rawArgs) {
     baseBranch: currentBaseBranch,
     verbose: singleRepoOptions.verboseAutoFinish,
   });
+  printWorktreePruneSummary(prunePayload, { baseBranch: currentBaseBranch });
   if (safe) {
     console.log(colorizeDoctorOutput(`[${TOOL_NAME}] ✅ Repo is fully safe.`, 'safe'));
   } else {
@@ -2967,6 +3007,12 @@ function setup(rawArgs) {
       aggregateErrors += sandboxResult.scanResult.errors;
       aggregateWarnings += sandboxResult.scanResult.warnings;
       lastScanResult = sandboxResult.scanResult;
+      const primaryBaseBranch = currentBranchName(blocked.repoRoot);
+      const prunePayload = doctorModule.pruneStaleAgentWorktrees(blocked.repoRoot, {
+        baseBranch: primaryBaseBranch,
+        dryRun: perRepoOptions.dryRun,
+      });
+      printWorktreePruneSummary(prunePayload, { baseBranch: primaryBaseBranch });
       continue;
     }
 
@@ -2992,6 +3038,13 @@ function setup(rawArgs) {
     printAutoFinishSummary(autoFinishSummary, {
       baseBranch: currentBaseBranch,
     });
+    const prunePayload = scanResult.guardexEnabled === false
+      ? { enabled: false, ran: false, status: 'skipped', details: ['Guardex disabled for this repo.'] }
+      : doctorModule.pruneStaleAgentWorktrees(scanResult.repoRoot, {
+        baseBranch: currentBaseBranch,
+        dryRun: perRepoOptions.dryRun,
+      });
+    printWorktreePruneSummary(prunePayload, { baseBranch: currentBaseBranch });
     printSetupRepoHints(scanResult.repoRoot, currentBaseBranch, repoLabel);
 
     aggregateErrors += scanResult.errors;

@@ -1006,6 +1006,70 @@ function autoFinishReadyAgentBranches(repoRoot, options = {}) {
   return summary;
 }
 
+function pruneStaleAgentWorktrees(repoRoot, options = {}) {
+  const summary = {
+    enabled: true,
+    ran: false,
+    status: 'skipped',
+    details: [],
+  };
+
+  const dryRun = Boolean(options.dryRun);
+  const baseBranch = String(options.baseBranch || '').trim();
+
+  if (String(process.env.GUARDEX_DOCTOR_SANDBOX || '') === '1') {
+    summary.enabled = false;
+    summary.details.push('Skipped stale-worktree prune inside doctor sandbox pass.');
+    return summary;
+  }
+
+  if (String(process.env.GUARDEX_SKIP_AUTO_WORKTREE_PRUNE || '') === '1') {
+    summary.enabled = false;
+    summary.details.push('Skipped stale-worktree prune (GUARDEX_SKIP_AUTO_WORKTREE_PRUNE=1).');
+    return summary;
+  }
+
+  const idleMinutesRaw = Number(options.idleMinutes);
+  const idleMinutes = Number.isFinite(idleMinutesRaw) && idleMinutesRaw >= 0
+    ? Math.floor(idleMinutesRaw)
+    : 60;
+
+  const args = [
+    '--idle-minutes', String(idleMinutes),
+    '--delete-branches',
+    '--delete-remote-branches',
+    '--include-pr-merged',
+    '--force-dirty',
+  ];
+  if (baseBranch && baseBranch !== 'HEAD' && !baseBranch.startsWith('agent/')) {
+    args.push('--base', baseBranch);
+  }
+  if (dryRun) {
+    args.push('--dry-run');
+  }
+
+  const runResult = runPackageAsset('worktreePrune', args, { cwd: repoRoot });
+  summary.ran = true;
+  const stdout = String(runResult.stdout || '').trim();
+  const stderr = String(runResult.stderr || '').trim();
+  if (stdout) {
+    for (const line of stdout.split('\n')) {
+      if (line.trim()) summary.details.push(line);
+    }
+  }
+  if (runResult.status === 0) {
+    summary.status = dryRun ? 'dry-run' : 'pruned';
+  } else {
+    summary.status = 'failed';
+    if (stderr) {
+      summary.details.push(`[error] ${stderr.split('\n').slice(-2).join(' | ')}`);
+    } else {
+      summary.details.push(`[error] worktreePrune exited with status ${runResult.status}`);
+    }
+  }
+  return summary;
+}
+
 function executeDoctorSandboxLifecycle(options, blocked, metadata, integrations) {
   const execution = createDoctorSandboxExecutionState();
   const dryRun = Boolean(options.dryRun);
@@ -1206,7 +1270,7 @@ function runDoctorInSandbox(options, blocked, rawIntegrations = {}) {
   const nestedResult = run(
     process.execPath,
     [require.main?.filename || process.argv[1], ...buildSandboxDoctorArgs(options, sandboxTarget)],
-    { cwd: metadata.worktreePath },
+    { cwd: metadata.worktreePath, env: { GUARDEX_DOCTOR_SANDBOX: '1' } },
   );
   if (isSpawnFailure(nestedResult)) {
     throw nestedResult.error;
@@ -1242,5 +1306,6 @@ module.exports = {
   emitDoctorSandboxJsonOutput,
   emitDoctorSandboxConsoleOutput,
   autoFinishReadyAgentBranches,
+  pruneStaleAgentWorktrees,
   runDoctorInSandbox,
 };

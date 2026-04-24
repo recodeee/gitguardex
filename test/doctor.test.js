@@ -1091,4 +1091,73 @@ exit 1
   );
 });
 
+test('gx doctor auto-prunes detached-HEAD agent worktrees under .omc/agent-worktrees', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+
+  const worktreeRoot = path.join(repoDir, '.omc', 'agent-worktrees');
+  fs.mkdirSync(worktreeRoot, { recursive: true });
+  const strandedWorktree = path.join(worktreeRoot, 'stranded-agent-worktree');
+
+  const branchResult = runHumanCmd('git', ['branch', 'agent/claude/stranded-demo'], repoDir);
+  assert.equal(branchResult.status, 0, branchResult.stderr || branchResult.stdout);
+  const addResult = runHumanCmd('git', ['worktree', 'add', strandedWorktree, 'agent/claude/stranded-demo'], repoDir);
+  assert.equal(addResult.status, 0, addResult.stderr || addResult.stdout);
+
+  const detachResult = runHumanCmd('git', ['-C', strandedWorktree, 'checkout', '--detach', 'HEAD'], repoDir);
+  assert.equal(detachResult.status, 0, detachResult.stderr || detachResult.stdout);
+  const delResult = runHumanCmd('git', ['branch', '-D', 'agent/claude/stranded-demo'], repoDir);
+  assert.equal(delResult.status, 0, delResult.stderr || delResult.stdout);
+
+  const pastTime = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const stampPath = path.join(strandedWorktree, '.stamp');
+  fs.writeFileSync(stampPath, 'stale\n', 'utf8');
+  fs.utimesSync(stampPath, pastTime, pastTime);
+
+  assert.ok(fs.existsSync(strandedWorktree), 'stranded worktree should exist before doctor');
+
+  const result = runNode(['doctor', '--target', repoDir, '--skip-agents', '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const combined = `${result.stdout}\n${result.stderr}`;
+  assert.match(combined, /Stale agent-worktree prune/);
+
+  assert.equal(
+    fs.existsSync(strandedWorktree),
+    false,
+    'doctor should have pruned the detached-HEAD agent worktree',
+  );
+});
+
+test('gx doctor preserves stranded worktrees when GUARDEX_SKIP_AUTO_WORKTREE_PRUNE=1', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedCommit(repoDir);
+
+  const worktreeRoot = path.join(repoDir, '.omc', 'agent-worktrees');
+  fs.mkdirSync(worktreeRoot, { recursive: true });
+  const strandedWorktree = path.join(worktreeRoot, 'stranded-optout');
+
+  runHumanCmd('git', ['branch', 'agent/claude/optout-demo'], repoDir);
+  const addResult = runHumanCmd('git', ['worktree', 'add', strandedWorktree, 'agent/claude/optout-demo'], repoDir);
+  assert.equal(addResult.status, 0, addResult.stderr || addResult.stdout);
+  runHumanCmd('git', ['-C', strandedWorktree, 'checkout', '--detach', 'HEAD'], repoDir);
+  runHumanCmd('git', ['branch', '-D', 'agent/claude/optout-demo'], repoDir);
+
+  const result = runNodeWithEnv(['doctor', '--target', repoDir, '--skip-agents', '--no-global-install'], repoDir, {
+    GUARDEX_SKIP_AUTO_WORKTREE_PRUNE: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const combined = `${result.stdout}\n${result.stderr}`;
+  assert.match(combined, /GUARDEX_SKIP_AUTO_WORKTREE_PRUNE=1/);
+  assert.doesNotMatch(
+    combined,
+    /removed_worktrees=\d/,
+    'opt-out env must prevent the worktreePrune shell script from running',
+  );
+
+  assert.ok(
+    fs.existsSync(strandedWorktree),
+    'doctor must preserve stranded worktree when opt-out env is set',
+  );
+});
+
 });
