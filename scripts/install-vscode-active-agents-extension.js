@@ -5,6 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 
 const PATCH_COMPATIBILITY_WINDOW = 20;
+const RETIRED_EXTENSION_IDS = [
+  'recodeee.gitguardex-active-agents',
+];
 
 function parseOptions(argv) {
   const options = {};
@@ -65,6 +68,12 @@ function buildInstallTargets(extensionId, version, extensionsDir) {
   return targets;
 }
 
+function isRetiredExtensionInstall(entryName, currentExtensionId) {
+  return RETIRED_EXTENSION_IDS
+    .filter((extensionId) => extensionId !== currentExtensionId)
+    .some((extensionId) => entryName === extensionId || entryName.startsWith(`${extensionId}-`));
+}
+
 function main() {
   const repoRoot = path.resolve(__dirname, '..');
   const options = parseOptions(process.argv.slice(2));
@@ -82,9 +91,15 @@ function main() {
   const targetDirs = buildInstallTargets(extensionId, manifest.version, extensionsDir);
   const canonicalTargetDir = targetDirs[0];
   const keepDirNames = new Set(targetDirs.map((targetDir) => path.basename(targetDir)));
+  let retiredInstallCount = 0;
 
   for (const entry of fs.readdirSync(extensionsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) {
+      continue;
+    }
+    if (isRetiredExtensionInstall(entry.name, extensionId)) {
+      removeIfExists(path.join(extensionsDir, entry.name));
+      retiredInstallCount += 1;
       continue;
     }
     if (keepDirNames.has(entry.name)) {
@@ -107,6 +122,7 @@ function main() {
   process.stdout.write(
     `[guardex-active-agents] Installed ${extensionId}@${manifest.version} to ${canonicalTargetDir}\n` +
       `[guardex-active-agents] Refreshed ${targetDirs.length - 1} recent patch compatibility path(s) for already-open windows.\n` +
+      `[guardex-active-agents] Removed ${retiredInstallCount} retired extension install path(s).\n` +
       '[guardex-active-agents] Reload each already-open VS Code window to activate the newest Source Control companion.\n',
   );
 }

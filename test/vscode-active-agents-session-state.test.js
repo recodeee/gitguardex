@@ -1217,11 +1217,17 @@ test('install-vscode-active-agents-extension installs the current extension into
     ? path.join(tempExtensionsDir, `${extensionId}-${major}.${minor}.${patch - 1}`)
     : currentVersionDir;
   const farLegacyDir = path.join(tempExtensionsDir, `${extensionId}-99.99.99`);
+  const retiredLegacyDir = path.join(tempExtensionsDir, 'recodeee.gitguardex-active-agents');
+  const retiredLegacyVersionDir = path.join(tempExtensionsDir, 'recodeee.gitguardex-active-agents-0.0.18');
 
   fs.mkdirSync(recentCompatDir, { recursive: true });
   fs.writeFileSync(path.join(recentCompatDir, 'stale.txt'), 'old', 'utf8');
   fs.mkdirSync(farLegacyDir, { recursive: true });
   fs.writeFileSync(path.join(farLegacyDir, 'stale.txt'), 'old', 'utf8');
+  fs.mkdirSync(retiredLegacyDir, { recursive: true });
+  fs.writeFileSync(path.join(retiredLegacyDir, 'extension.js'), 'vscode.scm.createSourceControl();\n', 'utf8');
+  fs.mkdirSync(retiredLegacyVersionDir, { recursive: true });
+  fs.writeFileSync(path.join(retiredLegacyVersionDir, 'extension.js'), 'vscode.scm.createSourceControl();\n', 'utf8');
 
   const result = runNode(installScript, ['--extensions-dir', tempExtensionsDir], {
     cwd: repoRoot,
@@ -1244,8 +1250,11 @@ test('install-vscode-active-agents-extension installs the current extension into
   assert.equal(fs.existsSync(path.join(recentCompatDir, 'package.json')), true);
   assert.equal(fs.existsSync(path.join(recentCompatDir, 'stale.txt')), false);
   assert.equal(fs.existsSync(farLegacyDir), false);
+  assert.equal(fs.existsSync(retiredLegacyDir), false);
+  assert.equal(fs.existsSync(retiredLegacyVersionDir), false);
   assert.match(result.stdout, new RegExp(`Installed ${extensionId}@${manifest.version} to ${canonicalDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(result.stdout, /Refreshed \d+ recent patch compatibility path\(s\)/);
+  assert.match(result.stdout, /Removed 2 retired extension install path\(s\)/);
   assert.match(result.stdout, /Reload each already-open VS Code window/);
 });
 
