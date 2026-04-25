@@ -1308,13 +1308,14 @@ test('active-agents manifest uses a dedicated activity bar container with a hive
   const manifest = readExtensionManifest();
   const activitybarContainers = manifest.contributes.viewsContainers?.activitybar || [];
   const activeAgentsContainer = activitybarContainers.find(
-    (entry) => entry.id === 'gitguardex.activeAgentsContainer',
+    (entry) => entry.id === 'gitguardex-active-agents-container',
   );
   assert.ok(activeAgentsContainer, 'Expected the Active Agents activity bar container.');
+  assert.match(activeAgentsContainer.id, /^[A-Za-z0-9_-]+$/);
   assert.equal(activeAgentsContainer.title, 'Active Agents');
   assert.equal(activeAgentsContainer.icon, 'media/active-agents-hivemind.svg');
 
-  const activeAgentsViews = manifest.contributes.views?.['gitguardex.activeAgentsContainer'] || [];
+  const activeAgentsViews = manifest.contributes.views?.['gitguardex-active-agents-container'] || [];
   assert.deepEqual(activeAgentsViews, [
     {
       id: 'gitguardex.activeAgents',
@@ -1540,7 +1541,7 @@ test('active-agents focus command opens the dedicated sidebar container', async 
 
   assert.equal(
     registrations.executedCommands.some((entry) => (
-      entry.command === 'workbench.view.extension.gitguardex.activeAgentsContainer'
+      entry.command === 'workbench.view.extension.gitguardex-active-agents-container'
     )),
     true,
   );
