@@ -3587,7 +3587,7 @@ function activate(context) {
     vscode.commands.registerCommand('gitguardex.activeAgents.refresh', refresh),
     vscode.commands.registerCommand('gitguardex.activeAgents.restart', restartActiveAgents),
     vscode.commands.registerCommand('gitguardex.activeAgents.focus', async () => {
-      await vscode.commands.executeCommand('workbench.view.extension.gitguardex.activeAgentsContainer');
+      await vscode.commands.executeCommand('workbench.view.extension.gitguardex-active-agents-container');
     }),
     vscode.commands.registerCommand('gitguardex.activeAgents.commitSelectedSession', commitSelectedSession),
     vscode.commands.registerCommand('gitguardex.activeAgents.openWorktree', async (session) => {
