@@ -265,6 +265,12 @@ Being honest about where this still has issues:
 <details open>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.40
+- Bumped `@imdeadpool/guardex` from `7.0.39` to `7.0.40` so the current
+  `main` payload can publish under a fresh npm version after `7.0.39` reached
+  the registry.
+- No new CLI command behavior is introduced in this release lane.
+
 ### v7.0.39
 - Bumped `@imdeadpool/guardex` from `7.0.38` to `7.0.39` so the current
   `main` payload can publish under a fresh npm version after `7.0.38` reached
