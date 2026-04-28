@@ -1,0 +1,9 @@
+- [x] 1.1 Define the companion-tooling scope for replacing `cavemem` with Colony.
+- [x] 1.2 Add normative spec coverage for status and setup install behavior.
+- [x] 2.1 Replace the global companion package mapping with `@imdeadpool/colony-cli`.
+- [x] 2.2 Update README companion install and runtime registration guidance.
+- [x] 2.3 Update setup/status regression fixtures for Colony.
+- [x] 3.1 Run targeted setup/status verification. Evidence: `node --test --test-name-pattern "setup skips global install when companion npm tools are already installed|setup installs only missing global tools|setup warns when user declines oh-my-claudecode dependency install|setup installs missing local companion tools with explicit approval|setup warns when gh dependency is missing" test/setup.test.js` passed 5/5; `node --test test/status.test.js` passed 19/19.
+- [x] 3.2 Run `node --check` for the CLI entrypoint. Evidence: `node --check bin/multiagent-safety.js` exited 0.
+- [x] 3.3 Run OpenSpec validation. Evidence: `openspec validate agent-codex-replace-cavemem-with-colony-companion-2026-04-28-20-34 --type change --strict` passed.
+- [ ] 4.1 Finish the guarded branch via PR merge and cleanup.

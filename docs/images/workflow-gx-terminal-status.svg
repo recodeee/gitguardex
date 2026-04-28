@@ -30,7 +30,7 @@
     <text x="96" y="302">@fission-ai/openspec: active</text>
     <text x="56" y="342">-</text>
     <circle cx="78" cy="334" r="7" fill="#22C55E"/>
-    <text x="96" y="342">cavemem: active</text>
+    <text x="96" y="342">colony: active</text>
     <text x="56" y="382">-</text>
     <circle cx="78" cy="374" r="7" fill="#22C55E"/>
     <text x="96" y="382">@imdeadpool/codex-account-switcher: active</text>

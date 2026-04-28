@@ -21,7 +21,7 @@ const GLOBAL_INSTALL_COMMAND = `npm i -g ${packageJson.name}`;
 const OPENSPEC_PACKAGE = '@fission-ai/openspec';
 const OMC_PACKAGE = 'oh-my-claude-sisyphus';
 const OMC_REPO_URL = 'https://github.com/Yeachan-Heo/oh-my-claudecode';
-const CAVEMEM_PACKAGE = 'cavemem';
+const COLONY_PACKAGE = '@imdeadpool/colony-cli';
 const NPX_BIN = process.env.GUARDEX_NPX_BIN || 'npx';
 const GUARDEX_HOME_DIR = path.resolve(process.env.GUARDEX_HOME_DIR || os.homedir());
 const GLOBAL_TOOLCHAIN_SERVICES = [
@@ -32,7 +32,7 @@ const GLOBAL_TOOLCHAIN_SERVICES = [
     dependencyUrl: OMC_REPO_URL,
   },
   { name: OPENSPEC_PACKAGE, packageName: OPENSPEC_PACKAGE },
-  { name: CAVEMEM_PACKAGE, packageName: CAVEMEM_PACKAGE },
+  { name: 'colony', packageName: COLONY_PACKAGE },
   {
     name: '@imdeadpool/codex-account-switcher',
     packageName: '@imdeadpool/codex-account-switcher',
@@ -674,7 +674,7 @@ module.exports = {
   OPENSPEC_PACKAGE,
   OMC_PACKAGE,
   OMC_REPO_URL,
-  CAVEMEM_PACKAGE,
+  COLONY_PACKAGE,
   NPX_BIN,
   GUARDEX_HOME_DIR,
   GLOBAL_TOOLCHAIN_SERVICES,

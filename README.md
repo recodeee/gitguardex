@@ -156,7 +156,7 @@ $ gx
   ● oh-my-codex                    active
   ● oh-my-claude-sisyphus          active
   ● @fission-ai/openspec           active
-  ● cavemem                        active
+  ● colony                         active
   ● cavekit                        optional · not installed
   ● gh                             authenticated
 
@@ -320,7 +320,7 @@ Install repo skills with `npx skills add recodee/gitguardex`; `npx skills add re
 | [**oh-my-codex**](https://github.com/Yeachan-Heo/oh-my-codex) — `npm i -g oh-my-codex` | Codex config + skills framework. Merged into every agent worktree so each spawned Codex starts with the same tuned config. | [![stars](https://img.shields.io/github/stars/Yeachan-Heo/oh-my-codex?style=social)](https://github.com/Yeachan-Heo/oh-my-codex) |
 | [**oh-my-claudecode**](https://github.com/Yeachan-Heo/oh-my-claudecode) — `npm i -g oh-my-claude-sisyphus@latest` | Claude-side mirror of oh-my-codex. Skills, commands, and defaults for every Claude Code session. | [![stars](https://img.shields.io/github/stars/Yeachan-Heo/oh-my-claudecode?style=social)](https://github.com/Yeachan-Heo/oh-my-claudecode) |
 | [**OpenSpec**](https://github.com/Fission-AI/OpenSpec) — `npm i -g @fission-ai/openspec` | Structured plan / change / apply / archive flow so long agent runs don't drift off-task. | [![stars](https://img.shields.io/github/stars/Fission-AI/OpenSpec?style=social)](https://github.com/Fission-AI/OpenSpec) |
-| [**cavemem**](https://github.com/JuliusBrussee/cavemem) — `npm i -g cavemem` | Local persistent memory for agents via SQLite + MCP. Retains compressed history across runs. | [![stars](https://img.shields.io/github/stars/JuliusBrussee/cavemem?style=social)](https://github.com/JuliusBrussee/cavemem) |
+| [**Colony**](https://github.com/recodeee/colony) — `npm i -g @imdeadpool/colony-cli` | Multi-agent task coordination and handoff routing. After install, register runtimes with `colony install --ide codex`, `colony install --ide claude-code`, `colony install --ide cursor`, `colony install --ide gemini-cli`, or `colony install --ide opencode`, then verify with `colony status`. | [![stars](https://img.shields.io/github/stars/recodeee/colony?style=social)](https://github.com/recodeee/colony) |
 | [**cavekit**](https://github.com/JuliusBrussee/cavekit) — `npx skills add JuliusBrussee/cavekit` | Spec-driven build loop with `spec`, `build`, `check`, `caveman`, `backprop` skills bundled in. | [![stars](https://img.shields.io/github/stars/JuliusBrussee/cavekit?style=social)](https://github.com/JuliusBrussee/cavekit) |
 | [**caveman**](https://github.com/JuliusBrussee/caveman) — `npx skills add JuliusBrussee/caveman` | Ultra-compressed response mode for Claude / Codex. Less output-token churn on long reviews and debug loops. | [![stars](https://img.shields.io/github/stars/JuliusBrussee/caveman?style=social)](https://github.com/JuliusBrussee/caveman) |
 | [**codex-account-switcher**](https://github.com/recodeecom/codex-account-switcher-cli) — `npm i -g @imdeadpool/codex-account-switcher` | Multi-identity Codex account switcher. Auto-registers accounts on `codex login`; switch with one command. | [![stars](https://img.shields.io/github/stars/recodeecom/codex-account-switcher-cli?style=social)](https://github.com/recodeecom/codex-account-switcher-cli) |
