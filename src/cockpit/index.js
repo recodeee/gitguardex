@@ -15,6 +15,7 @@ function parseCockpitArgs(rawArgs = []) {
   const options = {
     sessionName: DEFAULT_SESSION_NAME,
     attach: false,
+    noTmux: false,
     target: process.cwd(),
   };
 
@@ -22,6 +23,10 @@ function parseCockpitArgs(rawArgs = []) {
     const arg = rawArgs[index];
     if (arg === '--attach') {
       options.attach = true;
+      continue;
+    }
+    if (arg === '--no-tmux') {
+      options.noTmux = true;
       continue;
     }
     if (arg === '--session') {
@@ -53,6 +58,19 @@ function parseCockpitArgs(rawArgs = []) {
   }
 
   return options;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function cockpitRendererCommand(repoRoot) {
+  try {
+    const entry = require.resolve('./index');
+    return `${shellQuote(process.execPath)} ${shellQuote(entry)} ${shellQuote(repoRoot)}`;
+  } catch (_error) {
+    return `gx cockpit --no-tmux --target ${shellQuote(repoRoot)}`;
+  }
 }
 
 function render(repoPath = process.cwd()) {
@@ -93,9 +111,18 @@ function openCockpit(rawArgs, deps = {}) {
 
   const options = parseCockpitArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
-  const controlCommand = 'gx agents status';
+  if (options.noTmux) {
+    stdout.write(render(repoRoot));
+    return { action: 'rendered', sessionName: options.sessionName, repoRoot };
+  }
 
-  tmux.ensureTmuxAvailable();
+  const controlCommand = cockpitRendererCommand(repoRoot);
+
+  try {
+    tmux.ensureTmuxAvailable();
+  } catch (error) {
+    throw new Error(`${error.message}\nPreview without tmux: gx cockpit --no-tmux`);
+  }
 
   if (tmux.sessionExists(options.sessionName)) {
     stdout.write(`[${toolName}] Attaching tmux session '${options.sessionName}'.\n`);
@@ -109,14 +136,18 @@ function openCockpit(rawArgs, deps = {}) {
     const detail = String(createResult.stderr || createResult.stdout || '').trim();
     throw new Error(`tmux could not create session '${options.sessionName}'${detail ? `: ${detail}` : '.'}`);
   }
-  const sendResult = tmux.sendKeys(options.sessionName, controlCommand);
+  const paneId = String(createResult.stdout || '').trim();
+  if (!paneId) {
+    throw new Error(`tmux did not return a control pane id for session '${options.sessionName}'.`);
+  }
+  const sendResult = tmux.sendKeys(paneId, controlCommand);
   if (sendResult.error) throw sendResult.error;
   if (sendResult.status !== 0) {
     const detail = String(sendResult.stderr || sendResult.stdout || '').trim();
     throw new Error(`tmux could not start cockpit control pane${detail ? `: ${detail}` : '.'}`);
   }
   stdout.write(`[${toolName}] Created tmux session '${options.sessionName}' in ${repoRoot}.\n`);
-  stdout.write(`[${toolName}] Control pane: gx agents status\n`);
+  stdout.write(`[${toolName}] Control pane: ${controlCommand}\n`);
 
   if (options.attach) {
     tmux.attachSession(options.sessionName);
@@ -136,6 +167,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_SESSION_NAME,
   parseCockpitArgs,
+  cockpitRendererCommand,
   openCockpit,
   render,
   startCockpit,

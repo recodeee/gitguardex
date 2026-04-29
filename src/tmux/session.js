@@ -29,7 +29,7 @@ function sessionExists(name) {
 }
 
 function createSession(name, cwd) {
-  const args = ['new-session', '-d', '-s', requireName(name)];
+  const args = ['new-session', '-d', '-s', requireName(name), '-P', '-F', '#{pane_id}'];
   addCwd(args, cwd);
   return tmux.runTmux(args);
 }

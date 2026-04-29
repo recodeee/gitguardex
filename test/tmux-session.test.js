@@ -36,7 +36,7 @@ test('createSession builds detached session argv with cwd', () => {
     tmuxSession.createSession('gx-cockpit', '/repo');
     assert.deepEqual(calls, [
       {
-        args: ['new-session', '-d', '-s', 'gx-cockpit', '-c', '/repo'],
+        args: ['new-session', '-d', '-s', 'gx-cockpit', '-P', '-F', '#{pane_id}', '-c', '/repo'],
         options: undefined,
       },
     ]);
