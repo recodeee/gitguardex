@@ -1,21 +1,6 @@
-const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
-const {
-  listAgentSessions,
-  sessionFilePath,
-} = require('../agents/sessions');
-
-const ACTIVE_SESSIONS_DIR = path.join('.omx', 'state', 'active-sessions');
-const LOCK_FILE = path.join('.omx', 'state', 'agent-file-locks.json');
-
-function readJson(filePath) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch (_error) {
-    return null;
-  }
-}
+const { buildAgentsStatusPayload } = require('../agents/status');
 
 function text(value, fallback = '') {
   if (typeof value === 'string') {
@@ -48,113 +33,34 @@ function readBaseBranch(repoPath) {
   return originHead.replace(/^origin\//, '');
 }
 
-function normalizeSession(input, filePath) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return null;
-  }
-
-  const branch = text(input.branch);
-  const worktreePath = text(input.worktreePath || input.worktree_path);
-  if (!branch && !worktreePath) {
-    return null;
-  }
-
+function cockpitSessionFromStatus(session) {
   return {
-    agentName: text(input.agentName || input.agent || input.cliName, 'agent'),
-    branch: branch || '(unknown branch)',
-    worktreePath: worktreePath || '(unknown worktree)',
-    status: text(input.status || input.state || input.activity, 'unknown'),
-    task: text(input.latestTaskPreview || input.taskName || input.task),
-    lastHeartbeatAt: text(input.lastHeartbeatAt || input.updatedAt || input.updated_at),
-    filePath,
-    locks: [],
+    id: text(session.id),
+    agentName: text(session.agent, 'agent'),
+    branch: text(session.branch, '(unknown branch)'),
+    base: text(session.base),
+    worktreePath: text(session.worktreePath, '(unknown worktree)'),
+    worktreeExists: Boolean(session.worktreeExists),
+    status: text(session.status, 'unknown'),
+    task: text(session.task),
+    lockCount: Number.isFinite(session.lockCount) ? session.lockCount : 0,
   };
-}
-
-function readLegacyActiveSessions(repoPath) {
-  const sessionsDir = path.join(repoPath, ACTIVE_SESSIONS_DIR);
-  if (!fs.existsSync(sessionsDir)) {
-    return [];
-  }
-
-  return fs.readdirSync(sessionsDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-    .map((entry) => {
-      const filePath = path.join(sessionsDir, entry.name);
-      return normalizeSession(readJson(filePath), filePath);
-    })
-    .filter(Boolean)
-}
-
-function readCanonicalActiveSessions(repoPath) {
-  return listAgentSessions(repoPath)
-    .map((session) => normalizeSession(session, sessionFilePath(repoPath, session.id)))
-    .filter(Boolean);
-}
-
-function sessionKey(session) {
-  return `${session.branch}\0${session.worktreePath}`;
-}
-
-function readActiveSessions(repoPath) {
-  const byKey = new Map();
-  for (const session of readLegacyActiveSessions(repoPath)) {
-    byKey.set(sessionKey(session), session);
-  }
-  for (const session of readCanonicalActiveSessions(repoPath)) {
-    byKey.set(sessionKey(session), session);
-  }
-
-  return Array.from(byKey.values())
-    .sort((left, right) => left.branch.localeCompare(right.branch));
-}
-
-function readLocksByBranch(repoPath) {
-  const parsed = readJson(path.join(repoPath, LOCK_FILE));
-  const locks = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.locks : null;
-  const byBranch = new Map();
-  if (!locks || typeof locks !== 'object' || Array.isArray(locks)) {
-    return byBranch;
-  }
-
-  for (const [relativePath, entry] of Object.entries(locks)) {
-    const branch = text(entry && entry.branch);
-    if (!branch) {
-      continue;
-    }
-    if (!byBranch.has(branch)) {
-      byBranch.set(branch, []);
-    }
-    byBranch.get(branch).push(relativePath);
-  }
-
-  for (const entries of byBranch.values()) {
-    entries.sort((left, right) => left.localeCompare(right));
-  }
-  return byBranch;
 }
 
 function readCockpitState(repoPath = process.cwd()) {
   const resolvedRepoPath = path.resolve(repoPath);
-  const locksByBranch = readLocksByBranch(resolvedRepoPath);
-  const sessions = readActiveSessions(resolvedRepoPath).map((session) => ({
-    ...session,
-    locks: locksByBranch.get(session.branch) || [],
-  }));
+  const statusPayload = buildAgentsStatusPayload(resolvedRepoPath);
 
   return {
     repoPath: resolvedRepoPath,
     baseBranch: readBaseBranch(resolvedRepoPath),
-    sessions,
+    agentsStatus: statusPayload,
+    sessions: statusPayload.sessions.map(cockpitSessionFromStatus),
   };
 }
 
 module.exports = {
-  ACTIVE_SESSIONS_DIR,
-  LOCK_FILE,
   readCockpitState,
-  readActiveSessions,
-  readLegacyActiveSessions,
   readBaseBranch,
-  readLocksByBranch,
+  cockpitSessionFromStatus,
 };

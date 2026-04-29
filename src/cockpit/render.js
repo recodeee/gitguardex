@@ -12,12 +12,31 @@ function lockSummary(locks) {
   return `${locks.length} (${preview}${suffix})`;
 }
 
+function lockCountSummary(session) {
+  if (Array.isArray(session.locks)) {
+    return lockSummary(session.locks);
+  }
+
+  return Number.isFinite(session.lockCount) ? String(session.lockCount) : 'none';
+}
+
+function worktreeSummary(session) {
+  const worktreePath = session.worktreePath || '-';
+  if (session.worktreeExists === false) {
+    return `${worktreePath} (missing)`;
+  }
+  if (session.worktreeExists === true) {
+    return `${worktreePath} (present)`;
+  }
+  return worktreePath;
+}
+
 function renderSession(session, index) {
   const lines = [
     `${index + 1}. ${session.agentName || 'agent'} | ${session.status || 'unknown'}`,
     `   branch: ${session.branch || '-'}`,
-    `   worktree: ${session.worktreePath || '-'}`,
-    `   locks: ${lockSummary(session.locks)}`,
+    `   worktree: ${worktreeSummary(session)}`,
+    `   locks: ${lockCountSummary(session)}`,
   ];
 
   if (session.task) {
@@ -58,4 +77,6 @@ module.exports = {
   renderCockpit,
   renderSession,
   lockSummary,
+  lockCountSummary,
+  worktreeSummary,
 };

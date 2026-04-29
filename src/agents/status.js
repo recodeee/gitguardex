@@ -38,7 +38,7 @@ function normalizeSessionForStatus(session, lockCounts) {
   };
 }
 
-function buildAgentsStatus(repoRoot) {
+function buildAgentsStatusPayload(repoRoot) {
   const lockCounts = readLockCounts(repoRoot);
   return {
     schemaVersion: 1,
@@ -46,6 +46,8 @@ function buildAgentsStatus(repoRoot) {
     sessions: listAgentSessions(repoRoot).map((session) => normalizeSessionForStatus(session, lockCounts)),
   };
 }
+
+const buildAgentsStatus = buildAgentsStatusPayload;
 
 function formatValue(value) {
   const text = String(value || '');
@@ -72,10 +74,11 @@ function renderAgentsStatus(payload, options = {}) {
 }
 
 function runStatusCommand(repoRoot, options = {}) {
-  return renderAgentsStatus(buildAgentsStatus(repoRoot), options);
+  return renderAgentsStatus(buildAgentsStatusPayload(repoRoot), options);
 }
 
 module.exports = {
+  buildAgentsStatusPayload,
   buildAgentsStatus,
   renderAgentsStatus,
   runStatusCommand,
