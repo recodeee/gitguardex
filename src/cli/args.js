@@ -276,6 +276,7 @@ function parseAgentsArgs(rawArgs) {
     reviewIntervalSeconds: 30,
     cleanupIntervalSeconds: 60,
     idleMinutes: DEFAULT_SHADOW_CLEANUP_IDLE_MINUTES,
+    staleAgeMinutes: 24 * 60,
     pid: null,
     branch: '',
     json: false,
@@ -367,6 +368,19 @@ function parseAgentsArgs(rawArgs) {
       index += 1;
       continue;
     }
+    if (arg === '--older-than-minutes') {
+      const next = rest[index + 1];
+      if (!next) {
+        throw new Error('--older-than-minutes requires an integer minutes value');
+      }
+      const parsedValue = Number.parseInt(next, 10);
+      if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+        throw new Error('--older-than-minutes must be an integer >= 1');
+      }
+      options.staleAgeMinutes = parsedValue;
+      index += 1;
+      continue;
+    }
     if (arg === '--pid') {
       const next = rest[index + 1];
       if (!next) {
@@ -418,16 +432,19 @@ function parseAgentsArgs(rawArgs) {
     throw new Error(`Unknown option: ${arg}`);
   }
 
-  if (!['start', 'stop', 'status', 'files', 'diff', 'locks', 'finish'].includes(options.subcommand)) {
+  if (!['start', 'stop', 'status', 'files', 'diff', 'locks', 'finish', 'cleanup-sessions'].includes(options.subcommand)) {
     throw new Error(`Unknown agents subcommand: ${options.subcommand}`);
   }
   if (options.pid !== null && options.subcommand !== 'stop') {
     throw new Error('--pid is only supported with `gx agents stop`');
   }
-  if ((options.task || options.agent || options.base || options.dryRun || options.claims.length > 0) && options.subcommand !== 'start') {
-    throw new Error('--task, --agent, --base, --dry-run, and --claim are only supported with `gx agents start`');
+  if ((options.task || options.agent || options.base || options.claims.length > 0) && options.subcommand !== 'start') {
+    throw new Error('--task, --agent, --base, and --claim are only supported with `gx agents start`');
   }
-  if (options.dryRun && !options.task) {
+  if (options.dryRun && !['start', 'cleanup-sessions'].includes(options.subcommand)) {
+    throw new Error('--dry-run is only supported with `gx agents start|cleanup-sessions`');
+  }
+  if (options.subcommand === 'start' && options.dryRun && !options.task) {
     throw new Error('gx agents start --dry-run requires a task');
   }
   if (options.claims.length > 0 && !options.task) {
@@ -447,8 +464,11 @@ function parseAgentsArgs(rawArgs) {
   if (options.branch && !['files', 'diff', 'locks', 'finish'].includes(options.subcommand)) {
     throw new Error('--branch is only supported with `gx agents files|diff|locks|finish`');
   }
-  if (options.json && !['status', 'files', 'diff', 'locks'].includes(options.subcommand)) {
-    throw new Error('--json is only supported with `gx agents status|files|diff|locks`');
+  if (options.json && !['status', 'files', 'diff', 'locks', 'cleanup-sessions'].includes(options.subcommand)) {
+    throw new Error('--json is only supported with `gx agents status|files|diff|locks|cleanup-sessions`');
+  }
+  if (options.staleAgeMinutes !== 24 * 60 && options.subcommand !== 'cleanup-sessions') {
+    throw new Error('--older-than-minutes is only supported with `gx agents cleanup-sessions`');
   }
 
   return options;

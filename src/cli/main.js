@@ -7,6 +7,7 @@ const finishCommands = require('../finish');
 const doctorModule = require('../doctor');
 const agentInspect = require('../agents/inspect');
 const agentStatus = require('../agents/status');
+const agentCleanupSessions = require('../agents/cleanup-sessions');
 const { finishAgentSession } = require('../agents/finish');
 const sessionSeverityReport = require('../report/session-severity');
 const cockpitModule = require('../cockpit');
@@ -2658,6 +2659,12 @@ function agents(rawArgs) {
 
   if (options.subcommand === 'finish') {
     finishAgentSession(repoRoot, options);
+    process.exitCode = 0;
+    return;
+  }
+
+  if (options.subcommand === 'cleanup-sessions') {
+    process.stdout.write(agentCleanupSessions.runCleanupSessionsCommand(repoRoot, options));
     process.exitCode = 0;
     return;
   }
