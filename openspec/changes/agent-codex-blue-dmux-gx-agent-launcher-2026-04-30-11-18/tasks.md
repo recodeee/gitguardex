@@ -27,5 +27,7 @@
 
 ## 5. Cleanup
 
-- [ ] 5.1 Run the finish pipeline: `gx branch finish --branch agent/codex/blue-dmux-gx-agent-launcher-2026-04-30-11-18 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 5.2 Record PR URL, final `MERGED` state, and sandbox cleanup evidence.
+- [x] 5.1 Run the finish pipeline: `gx branch finish --branch agent/codex/blue-dmux-gx-agent-launcher-2026-04-30-11-18 --base main --via-pr --wait-for-merge --cleanup`.
+  - Evidence: PR #491 merged as https://github.com/recodeee/gitguardex/pull/491 with merge commit `a8ec97c2dd9edbc686220e918d5dd80013629d9a` at `2026-04-30T09:23:31Z`.
+- [x] 5.2 Record PR URL, final `MERGED` state, and sandbox cleanup evidence.
+  - Evidence: `gh pr view agent/codex/blue-dmux-gx-agent-launcher-2026-04-30-11-18 --repo recodeee/gitguardex --json number,url,state,mergeCommit,mergedAt,headRefName,baseRefName` returned `state=MERGED`; `gx cleanup --base main` removed `/home/deadpool/Documents/recodee/gitguardex/.omx/agent-worktrees/gitguardex__codex__blue-dmux-gx-agent-launcher-2026-04-30-11-18`; `git worktree list --porcelain` showed only the primary `main` checkout; local and remote source branch lookups returned no branch.
