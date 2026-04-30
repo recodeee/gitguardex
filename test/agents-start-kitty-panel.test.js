@@ -93,9 +93,13 @@ test('panel-launched single agent opens a Kitty terminal session', () => {
   const sessionFile = terminalCalls[1].args[2];
   assert.match(sessionFile, /\.guardex\/agents\/terminals\/agent__codex__fix-auth-1\.kitty-session$/);
   const sessionBody = fs.readFileSync(sessionFile, 'utf8');
+  assert.match(sessionBody, /new_tab 'gx welcome'/);
+  assert.match(sessionBody, /cd '.*guardex-kitty-panel-/);
+  assert.match(sessionBody, /launch --title 'gx welcome' sh -lc 'gx'/);
   assert.match(sessionBody, /new_tab '1: codex fix-auth'/);
   assert.match(sessionBody, /cd '.*repo__codex__fix-auth'/);
   assert.match(sessionBody, /launch --title '1: codex fix-auth' sh -lc 'cd/);
+  assert.ok(sessionBody.indexOf("new_tab 'gx welcome'") < sessionBody.indexOf("new_tab '1: codex fix-auth'"));
 });
 
 test('non-panel single agent start keeps terminal launch opt-in unchanged', () => {
