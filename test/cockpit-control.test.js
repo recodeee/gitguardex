@@ -142,10 +142,10 @@ test('applyCockpitAction routes pane menu hotkeys to pane action intents', () =>
   });
 
   state = applyCockpitAction(state, { type: 'key', key: 'P' });
-  assert.equal(state.lastIntent.type, 'create-pr');
+  assert.equal(state.lastIntent.type, 'project-focus');
 
   state = applyCockpitAction(state, { type: 'key', key: 'r' });
-  assert.equal(state.lastIntent.type, 'refresh');
+  assert.equal(state.lastIntent.type, 'reopen-closed-worktree');
 });
 
 test('renderControlFrame renders sidebar with details, menu, and settings modes', () => {
@@ -163,7 +163,7 @@ test('renderControlFrame renders sidebar with details, menu, and settings modes'
   const menu = renderControlFrame(applyCockpitAction(baseState, { type: 'key', key: 'm' }));
   assert.match(menu, /Menu: codex/);
   assert.match(menu, /View\s+\[j\]/);
-  assert.match(menu, /Create GitHub PR\s+\[P\]/);
+  assert.match(menu, /Project Focus\s+\[P\]/);
 
   const settings = renderControlFrame(applyCockpitAction(baseState, { type: 'key', key: 's' }));
   assert.match(settings, /gx cockpit settings/);

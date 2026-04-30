@@ -6,6 +6,7 @@ const PANE_MENU_ACTION_IDS = Object.freeze({
   CLOSE: 'close',
   MERGE: 'merge',
   CREATE_PR: 'create-pr',
+  PROJECT_FOCUS: 'project-focus',
   RENAME: 'rename',
   COPY_PATH: 'copy-path',
   OPEN_EDITOR: 'open-editor',
@@ -14,6 +15,7 @@ const PANE_MENU_ACTION_IDS = Object.freeze({
   BROWSE_FILES: 'browse-files',
   ADD_TERMINAL: 'add-terminal',
   ADD_AGENT: 'add-agent',
+  REOPEN_CLOSED_WORKTREE: 'reopen-closed-worktree',
 });
 
 const PANE_MENU_ACTIONS = PANE_MENU_ACTION_IDS;
@@ -23,7 +25,8 @@ const PANE_MENU_ITEMS = Object.freeze([
   { id: PANE_MENU_ACTION_IDS.HIDE_PANE, label: 'Hide Pane', hotkey: 'h', needsSession: true },
   { id: PANE_MENU_ACTION_IDS.CLOSE, label: 'Close', hotkey: 'x', danger: true, needsSession: true },
   { id: PANE_MENU_ACTION_IDS.MERGE, label: 'Merge', hotkey: 'm', needsSession: true, needsWorktree: true, needsBranch: true },
-  { id: PANE_MENU_ACTION_IDS.CREATE_PR, label: 'Create GitHub PR', hotkey: 'P', needsSession: true, needsWorktree: true, needsBranch: true },
+  { id: PANE_MENU_ACTION_IDS.CREATE_PR, label: 'Create GitHub PR', needsSession: true, needsWorktree: true, needsBranch: true },
+  { id: PANE_MENU_ACTION_IDS.PROJECT_FOCUS, label: 'Project Focus', hotkey: 'P', needsSession: true },
   { id: PANE_MENU_ACTION_IDS.RENAME, label: 'Rename', needsSession: true },
   { id: PANE_MENU_ACTION_IDS.COPY_PATH, label: 'Copy Path', needsSession: true, needsWorktree: true },
   { id: PANE_MENU_ACTION_IDS.OPEN_EDITOR, label: 'Open in Editor', needsSession: true, needsWorktree: true },
@@ -32,6 +35,7 @@ const PANE_MENU_ITEMS = Object.freeze([
   { id: PANE_MENU_ACTION_IDS.BROWSE_FILES, label: 'Browse Files', hotkey: 'f', needsSession: true, needsWorktree: true },
   { id: PANE_MENU_ACTION_IDS.ADD_TERMINAL, label: 'Add Terminal to Worktree', hotkey: 'A', needsSession: true, needsWorktree: true },
   { id: PANE_MENU_ACTION_IDS.ADD_AGENT, label: 'Add Agent to Worktree', hotkey: 'a', needsSession: true, needsWorktree: true, needsBranch: true },
+  { id: PANE_MENU_ACTION_IDS.REOPEN_CLOSED_WORKTREE, label: 'Reopen Closed Worktree', hotkey: 'r', needsSession: true },
 ]);
 
 const PANE_MENU_FOOTER = '↑↓ to navigate • Enter or hotkey to select • ESC to cancel';

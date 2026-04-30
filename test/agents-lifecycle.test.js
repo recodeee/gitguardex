@@ -103,7 +103,7 @@ test('agents local lane lifecycle resolves one canonical session across start st
   assert.equal(statusResult.status, 0, statusResult.stderr || statusResult.stdout);
   assert.match(statusResult.stdout, /Agent sessions: 1/);
   assert.match(statusResult.stdout, /agent__codex__lifecycle codex active branch=agent\/codex\/lifecycle base=main/);
-  assert.match(statusResult.stdout, /worktreeExists=yes locks=0 task=exercise lifecycle/);
+  assert.match(statusResult.stdout, /worktreeExists=yes locks=0 changed=1 task=exercise lifecycle/);
 
   writeLockRegistry(repoRoot, branch);
 

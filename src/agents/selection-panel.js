@@ -20,7 +20,7 @@ const PANEL_ACTIONS = [
   ['b', 'Child worktree', 'branch from selected pane'],
   ['f', 'Files', 'browse selected worktree read-only'],
   ['h/H', 'Hide panes', 'hide one or isolate selected pane'],
-  ['P', 'Project focus', 'show only one project'],
+  ['P', 'Project focus', 'show only the selected project'],
   ['a/A', 'Add to pane', 'agent or terminal in worktree'],
   ['r', 'Reopen', 'restore a closed worktree'],
 ];
@@ -189,6 +189,12 @@ function rawPanelKey(value) {
 }
 
 function normalizePanelKey(value) {
+  if (value && typeof value === 'object' && !Buffer.isBuffer(value)) {
+    if ((value.meta || value.alt) && value.shift && String(value.name || value.key || '').toLowerCase() === 'm') {
+      return 'alt-shift-m';
+    }
+    return normalizePanelKey(value.name || value.sequence || value.key || '');
+  }
   const raw = rawPanelKey(value);
   if (raw === '\u0003') return 'ctrl-c';
   if (raw === '\u0015') return 'ctrl-u';

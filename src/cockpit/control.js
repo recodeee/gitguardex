@@ -35,7 +35,7 @@ const SETTINGS_FIELDS = [
 
 const MENU_ITEMS = PANE_MENU_ITEMS;
 const PANE_ACTION_IDS = new Set(PANE_MENU_ITEMS.map((item) => item.id));
-const DIRECT_DETAIL_PANE_KEYS = new Set(['x', 'b', 'f', 'h', 'P', 'a', 'A']);
+const DIRECT_DETAIL_PANE_KEYS = new Set(['x', 'b', 'f', 'h', 'P', 'a', 'A', 'r']);
 
 function text(value, fallback = '') {
   if (typeof value === 'string') return value.trim() || fallback;
@@ -367,12 +367,6 @@ function applyKey(state, rawKey) {
       lastIntent: null,
     });
   }
-  if (key === 'r') {
-    return normalizeControlState({
-      ...current,
-      lastIntent: buildIntent(current, 'refresh'),
-    });
-  }
   if (key === 'enter') {
     if (mode === 'menu') return chooseMenuItem(current);
     if (mode === 'settings') {
@@ -486,7 +480,7 @@ function renderDetailsPanel(state) {
     lines.push(`locks: ${Number.isFinite(session.lockCount) ? session.lockCount : 0}`);
   }
 
-  lines.push('', 'keys: up/down select  m/Alt+Shift+M menu  x/b/f/h/P/a/A pane actions  s settings  r refresh  q quit');
+  lines.push('', 'keys: up/down select  m/Alt+Shift+M menu  x/b/f/h/P/a/A/r pane actions  s settings  q quit');
   if (current.error) {
     lines.push('', `error: ${text(current.error)}`);
   }

@@ -34,6 +34,7 @@ function fakeBin(name, scriptBody) {
 function fakeKitty() {
   return fakeBin('kitty', [
     'printf "%s\\n" "$PWD :: $*" >> "$LOG"',
+    'if [[ "${1:-}" == "--version" ]]; then echo "kitty 0.35.0"; exit 0; fi',
     'if [[ "${1:-}" == "@" && "${2:-}" == "ls" ]]; then exit 0; fi',
     'if [[ "${1:-}" == "@" && "${2:-}" == "launch" ]]; then exit 0; fi',
     'exit 9',
@@ -75,9 +76,10 @@ test('gx cockpit --backend auto command path opens Kitty when remote control ans
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Created kitty cockpit window 'guardex-auto'/);
   const lines = readLogLines(kitty.log);
-  assert.equal(lines.length, 2);
-  assert.match(lines[0], / :: @ ls$/);
-  assertKittyLaunchLine(lines[1], repoDir);
+  assert.equal(lines.length, 3);
+  assert.match(lines[0], / :: --version$/);
+  assert.match(lines[1], / :: @ ls$/);
+  assertKittyLaunchLine(lines[2], repoDir);
 });
 
 test('gx cockpit --backend kitty dry-run layout plan is deterministic and does not execute Kitty', () => {
@@ -161,11 +163,10 @@ test('cockpit pane menu opens and selects a lane terminal action', () => {
   state = applyCockpitAction(state, { type: 'key', key: 'm' });
   assert.equal(state.mode, 'menu');
 
-  state = applyCockpitAction(state, { type: 'key', key: 'down' });
-  state = applyCockpitAction(state, { type: 'key', key: '\r' });
+  state = applyCockpitAction(state, { type: 'key', key: 'A' });
 
   assert.deepEqual(state.lastIntent, {
-    type: 'terminal:open',
+    type: 'add-terminal',
     sessionId: 'pane-1',
     branch: 'agent/codex/pane-1',
     worktreePath: '/repo/.omx/agent-worktrees/pane-1',
@@ -193,20 +194,17 @@ test('lane menu selected action id reaches the cockpit action dispatcher', () =>
     },
   });
 
-  assert.equal(selected.id, 'finish-pr');
+  assert.equal(selected.id, 'browse-files');
   assert.equal(result.ok, true);
   assert.deepEqual(calls, [{
     cmd: 'gx',
     args: [
       'agents',
-      'finish',
+      'files',
       '--target',
       '/repo',
       '--branch',
       'agent/codex/pane-1',
-      '--via-pr',
-      '--wait-for-merge',
-      '--cleanup',
     ],
   }]);
 });

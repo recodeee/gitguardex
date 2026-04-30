@@ -21,14 +21,14 @@ test('builds codex launch commands with positional prompts', () => {
   );
 });
 
-test('builds claude launch commands with option prompts', () => {
+test('builds claude launch commands with argument prompts', () => {
   assert.equal(
     buildAgentLaunchCommand({
       agentId: 'claude',
       prompt: 'review code',
       permissionMode: 'acceptEdits',
     }),
-    "'claude' '--permission-mode' 'acceptEdits' '--prompt' 'review code'",
+    "'claude' '--permission-mode' 'acceptEdits' 'review code'",
   );
 });
 
@@ -42,25 +42,25 @@ test('builds opencode launch commands with positional prompts', () => {
   );
 });
 
-test('builds cursor launch commands with stdin prompts', () => {
+test('builds cursor launch commands with argument prompts', () => {
   assert.equal(
     buildAgentLaunchCommand({
       agentId: 'cursor',
       prompt: 'inspect current branch',
       worktreePath: '/repo/worktree',
     }),
-    "cd '/repo/worktree' && printf %s 'inspect current branch' | 'cursor-agent'",
+    "cd '/repo/worktree' && 'cursor-agent' 'inspect current branch'",
   );
 });
 
-test('builds gemini launch commands with option prompts', () => {
+test('builds gemini launch commands with argument prompts', () => {
   assert.equal(
     buildAgentLaunchCommand({
       agentId: 'gemini',
       prompt: 'summarize repo',
       sessionId: 'session-2',
     }),
-    "OMX_SESSION_ID='session-2' 'gemini' '--prompt' 'summarize repo'",
+    "OMX_SESSION_ID='session-2' 'gemini' 'summarize repo'",
   );
 });
 
@@ -74,12 +74,12 @@ test('quotes prompts with single quotes, newlines, and dollar signs safely', () 
 
   assert.equal(
     buildAgentLaunchCommand({ agentId: 'gemini', prompt }),
-    "'gemini' '--prompt' 'say '\\''hello'\\''\nthen echo $HOME'",
+    "'gemini' 'say '\\''hello'\\''\nthen echo $HOME'",
   );
 
   assert.equal(
     buildAgentLaunchCommand({ agentId: 'cursor', prompt }),
-    "printf %s 'say '\\''hello'\\''\nthen echo $HOME' | 'cursor-agent'",
+    "'cursor-agent' 'say '\\''hello'\\''\nthen echo $HOME'",
   );
 });
 
@@ -101,6 +101,6 @@ test('builds resume commands for supported agents', () => {
 test('rejects unsupported agents', () => {
   assert.throws(
     () => buildAgentLaunchCommand({ agentId: 'unknown', prompt: 'x' }),
-    /Unsupported agent: unknown/,
+    /Unknown agent id: unknown/,
   );
 });

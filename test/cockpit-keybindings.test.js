@@ -20,7 +20,7 @@ test('defaultKeybindings exposes dmux-style cockpit commands for main mode', () 
   assert.equal(bindings.main.b.type, 'create-child-worktree');
   assert.equal(bindings.main.f.type, 'browse-files');
   assert.equal(bindings.main.h.type, 'hide-pane');
-  assert.equal(bindings.main.P.type, 'create-pr');
+  assert.equal(bindings.main.P.type, 'project-focus');
   assert.equal(bindings.main.a.type, 'add-agent');
   assert.equal(bindings.main.A.type, 'add-terminal');
   assert.equal(bindings.main.d.type, 'diff');
@@ -28,7 +28,7 @@ test('defaultKeybindings exposes dmux-style cockpit commands for main mode', () 
   assert.equal(bindings.main.y.type, 'sync');
   assert.equal(bindings.main.F.type, 'finish');
   assert.equal(bindings.main.c.type, 'cleanup-sessions');
-  assert.equal(bindings.main.r.type, 'doctor');
+  assert.equal(bindings.main.r.type, 'reopen-closed-worktree');
   assert.equal(bindings.main.q.type, 'quit');
 });
 
@@ -50,11 +50,11 @@ test('resolveKeyAction maps main mode keys to structured actions', () => {
     payload: { key: 'A', mode: 'main' },
   });
   assert.deepEqual(resolveKeyAction('P', { mode: 'main' }), {
-    type: 'create-pr',
+    type: 'project-focus',
     payload: { key: 'P', mode: 'main' },
   });
   assert.deepEqual(resolveKeyAction('r', { mode: 'main' }), {
-    type: 'doctor',
+    type: 'reopen-closed-worktree',
     payload: { key: 'r', mode: 'main' },
   });
   assert.deepEqual(resolveKeyAction('ArrowDown', { mode: 'main' }), {

@@ -53,6 +53,7 @@ test('runCockpitAction maps sync and finish without weakening PR-only safety', (
 
   assert.equal(runCockpitAction('sync', context).ok, true);
   assert.equal(runCockpitAction('finish-pr', context).ok, true);
+  assert.equal(runCockpitAction('merge', context).ok, true);
 
   assert.deepEqual(calls.map((call) => [call.cmd, call.args]), [
     ['gx', ['sync', '--target', '/repo/.omx/agent-worktrees/example', '--base', 'main']],
@@ -70,7 +71,50 @@ test('runCockpitAction maps sync and finish without weakening PR-only safety', (
         '--cleanup',
       ],
     ],
+    [
+      'gx',
+      [
+        'agents',
+        'finish',
+        '--target',
+        '/repo',
+        '--branch',
+        'agent/codex/example',
+        '--via-pr',
+        '--wait-for-merge',
+        '--cleanup',
+      ],
+    ],
   ]);
+});
+
+test('unsupported pane menu actions return clear status without mutating worktrees', () => {
+  const { context, calls } = mockContext();
+
+  for (const action of ['hide-pane', 'create-pr', 'rename', 'toggle-autopilot', 'create-child-worktree', 'add-terminal']) {
+    const result = runCockpitAction(action, context);
+    assert.equal(result.ok, false, action);
+    assert.match(result.message, /not implemented|guarded PR-only|left unchanged|No /, action);
+  }
+
+  assert.deepEqual(calls, []);
+});
+
+test('add-agent uses the safe selected-worktree launch workflow when provided', () => {
+  const { context, calls } = mockContext({
+    startAgentLane(request) {
+      return {
+        ok: true,
+        message: `started from ${request.base}`,
+      };
+    },
+  });
+
+  const result = runCockpitAction('add-agent', context);
+
+  assert.equal(result.ok, true);
+  assert.match(result.message, /agent\/codex\/example/);
+  assert.deepEqual(calls, []);
 });
 
 test('view selects the associated pane and close kills only that pane', () => {

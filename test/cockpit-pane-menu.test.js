@@ -34,7 +34,8 @@ test('renderPaneMenu renders the dmux-style title, items, hotkeys, and footer', 
   assert.match(output, /Hide Pane\s+\[h\]/);
   assert.match(output, /Close\s+\[x\]/);
   assert.match(output, /Merge\s+\[m\]/);
-  assert.match(output, /Create GitHub PR\s+\[P\]/);
+  assert.match(output, /Create GitHub PR/);
+  assert.match(output, /Project Focus\s+\[P\]/);
   assert.match(output, /Rename/);
   assert.match(output, /Copy Path/);
   assert.match(output, /Open in Editor/);
@@ -43,6 +44,7 @@ test('renderPaneMenu renders the dmux-style title, items, hotkeys, and footer', 
   assert.match(output, /Browse Files\s+\[f\]/);
   assert.match(output, /Add Terminal to Worktree\s+\[A\]/);
   assert.match(output, /Add Agent to Worktree\s+\[a\]/);
+  assert.match(output, /Reopen Closed Worktree\s+\[r\]/);
   assert.match(output, new RegExp(PANE_MENU_FOOTER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
@@ -50,7 +52,9 @@ test('pane menu action constants expose stable action ids', () => {
   assert.equal(PANE_MENU_ACTIONS.VIEW, 'view');
   assert.equal(PANE_MENU_ACTIONS.HIDE_PANE, 'hide-pane');
   assert.equal(PANE_MENU_ACTIONS.CREATE_PR, 'create-pr');
+  assert.equal(PANE_MENU_ACTIONS.PROJECT_FOCUS, 'project-focus');
   assert.equal(PANE_MENU_ACTIONS.ADD_AGENT, 'add-agent');
+  assert.equal(PANE_MENU_ACTIONS.REOPEN_CLOSED_WORKTREE, 'reopen-closed-worktree');
   assert.equal(PANE_MENU_ACTION_IDS.MERGE, 'merge');
 });
 
@@ -96,11 +100,12 @@ test('applyPaneMenuKey selects direct hotkeys', () => {
     ['h', PANE_MENU_ACTION_IDS.HIDE_PANE],
     ['x', PANE_MENU_ACTION_IDS.CLOSE],
     ['m', PANE_MENU_ACTION_IDS.MERGE],
-    ['P', PANE_MENU_ACTION_IDS.CREATE_PR],
+    ['P', PANE_MENU_ACTION_IDS.PROJECT_FOCUS],
     ['b', PANE_MENU_ACTION_IDS.CREATE_CHILD_WORKTREE],
     ['f', PANE_MENU_ACTION_IDS.BROWSE_FILES],
     ['A', PANE_MENU_ACTION_IDS.ADD_TERMINAL],
     ['a', PANE_MENU_ACTION_IDS.ADD_AGENT],
+    ['r', PANE_MENU_ACTION_IDS.REOPEN_CLOSED_WORKTREE],
   ];
 
   for (const [key, actionId] of cases) {
