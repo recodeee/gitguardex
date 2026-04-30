@@ -2,19 +2,15 @@ const { readCockpitState } = require('./state');
 const { renderCockpit } = require('./render');
 const control = require('./control');
 const actions = require('./actions');
-const {
-  ensureTmuxAvailable,
-  sessionExists,
-  createSession,
-  attachSession,
-  sendKeys,
-} = require('../tmux/session');
+const { normalizeBackendName, selectTerminalBackend } = require('../terminal');
 
 const DEFAULT_SESSION_NAME = 'guardex';
+const DEFAULT_BACKEND = 'tmux';
 
 function parseCockpitArgs(rawArgs = []) {
   const options = {
     sessionName: DEFAULT_SESSION_NAME,
+    backend: process.env.GUARDEX_COCKPIT_BACKEND || DEFAULT_BACKEND,
     attach: false,
     target: process.cwd(),
   };
@@ -39,6 +35,23 @@ function parseCockpitArgs(rawArgs = []) {
       if (!options.sessionName) {
         throw new Error('--session requires a tmux session name');
       }
+      continue;
+    }
+    if (arg === '--backend') {
+      const next = rawArgs[index + 1];
+      if (!next || next.startsWith('-')) {
+        throw new Error('--backend requires auto, kitty, or tmux');
+      }
+      options.backend = normalizeBackendName(next);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--backend=')) {
+      const next = arg.slice('--backend='.length);
+      if (!next) {
+        throw new Error('--backend requires auto, kitty, or tmux');
+      }
+      options.backend = normalizeBackendName(next);
       continue;
     }
     if (arg === '--target' || arg === '-t') {
@@ -133,13 +146,6 @@ function openCockpit(rawArgs = [], deps = {}) {
     resolveRepoRoot,
     toolName = 'gitguardex',
     stdout = process.stdout,
-    tmux = {
-      ensureTmuxAvailable,
-      sessionExists,
-      createSession,
-      attachSession,
-      sendKeys,
-    },
   } = deps;
   if (typeof resolveRepoRoot !== 'function') {
     throw new Error('openCockpit requires resolveRepoRoot');
@@ -162,36 +168,39 @@ function openCockpit(rawArgs = [], deps = {}) {
   const options = parseCockpitArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
   const controlCommand = cockpitControlCommand(repoRoot);
+  const terminalBackendOptions = { ...(deps.terminalBackendOptions || {}) };
+  if (deps.terminalBackends && deps.terminalBackends.kitty) {
+    terminalBackendOptions.kittyBackend = deps.terminalBackends.kitty;
+  }
+  if (deps.terminalBackends && deps.terminalBackends.tmux) {
+    terminalBackendOptions.tmuxBackend = deps.terminalBackends.tmux;
+  }
+  if (deps.tmux) {
+    terminalBackendOptions.tmux = { tmux: deps.tmux };
+  }
+  const backend = selectTerminalBackend(options.backend, terminalBackendOptions);
 
-  tmux.ensureTmuxAvailable();
+  const result = backend.openCockpitLayout({
+    repoRoot,
+    sessionName: options.sessionName,
+    command: controlCommand,
+    attach: options.attach,
+  });
+  const action = result && result.action ? result.action : 'created';
 
-  if (tmux.sessionExists(options.sessionName)) {
+  if (backend.name === 'tmux' && action === 'attached') {
     stdout.write(`[${toolName}] Attaching tmux session '${options.sessionName}'.\n`);
-    tmux.attachSession(options.sessionName);
-    return { action: 'attached', sessionName: options.sessionName, repoRoot };
+    return { action, backend: backend.name, sessionName: options.sessionName, repoRoot };
   }
 
-  const createResult = tmux.createSession(options.sessionName, repoRoot);
-  if (createResult.error) throw createResult.error;
-  if (createResult.status !== 0) {
-    const detail = String(createResult.stderr || createResult.stdout || '').trim();
-    throw new Error(`tmux could not create session '${options.sessionName}'${detail ? `: ${detail}` : '.'}`);
+  if (backend.name === 'tmux') {
+    stdout.write(`[${toolName}] Created tmux session '${options.sessionName}' in ${repoRoot}.\n`);
+  } else {
+    stdout.write(`[${toolName}] Created ${backend.name} cockpit window '${options.sessionName}' in ${repoRoot}.\n`);
   }
-  const sendResult = tmux.sendKeys(options.sessionName, controlCommand);
-  if (sendResult.error) throw sendResult.error;
-  if (sendResult.status !== 0) {
-    const detail = String(sendResult.stderr || sendResult.stdout || '').trim();
-    throw new Error(`tmux could not start cockpit control pane${detail ? `: ${detail}` : '.'}`);
-  }
-  stdout.write(`[${toolName}] Created tmux session '${options.sessionName}' in ${repoRoot}.\n`);
   stdout.write(`[${toolName}] Control pane: ${controlCommand}\n`);
 
-  if (options.attach) {
-    tmux.attachSession(options.sessionName);
-    return { action: 'created-attached', sessionName: options.sessionName, repoRoot };
-  }
-
-  return { action: 'created', sessionName: options.sessionName, repoRoot };
+  return { action, backend: backend.name, sessionName: options.sessionName, repoRoot };
 }
 
 if (require.main === module) {
@@ -203,6 +212,7 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_SESSION_NAME,
+  DEFAULT_BACKEND,
   cockpitControlCommand,
   parseCockpitArgs,
   parseCockpitControlArgs,

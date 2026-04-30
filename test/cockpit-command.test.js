@@ -32,11 +32,11 @@ test('cockpit creates the default tmux session in the repo root', () => {
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Created tmux session 'guardex'/);
-  assert.match(result.stdout, /Control pane: gx agents status/);
+  assert.match(result.stdout, /Control pane: gx cockpit control --target/);
   const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
   assert.match(lines[1], /^.* :: has-session -t guardex$/);
   assert.match(lines[2], new RegExp(`^${repoDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} :: new-session -d -s guardex -c ${repoDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
-  assert.match(lines[3], /^.* :: send-keys -t guardex gx agents status C-m$/);
+  assert.match(lines[3], /^.* :: send-keys -t guardex gx cockpit control --target .* C-m$/);
 });
 
 test('cockpit attaches when the tmux session already exists', () => {
@@ -80,7 +80,7 @@ test('cockpit --attach creates then attaches when the session is missing', () =>
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const logged = fs.readFileSync(log, 'utf8');
   assert.match(logged, /new-session -d -s guardex-dev/);
-  assert.match(logged, /send-keys -t guardex-dev gx agents status C-m/);
+  assert.match(logged, /send-keys -t guardex-dev gx cockpit control --target .* C-m/);
   assert.match(logged, /attach-session -t guardex-dev/);
 });
 
