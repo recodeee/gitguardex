@@ -33,6 +33,9 @@ This change is complete only when **all** of the following are true:
 
 ## 4. Cleanup (mandatory; run before claiming completion)
 
-- [ ] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/improve-gx-launcher-pane-management-ux-2026-04-30-12-02 --base main --via-pr --wait-for-merge --cleanup`. This handles commit -> push -> PR create -> merge wait -> worktree prune in one invocation.
-- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
-- [ ] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).
+- [x] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/improve-gx-launcher-pane-management-ux-2026-04-30-12-02 --base main --via-pr --wait-for-merge --cleanup`. This handles commit -> push -> PR create -> merge wait -> worktree prune in one invocation.
+  - Evidence: PR #495 merged as https://github.com/recodeee/gitguardex/pull/495 (`MERGED`, merge commit `e4b45db79f2c6ea699b4ed41edf69f5aa54fe84f`, merged at `2026-04-30T10:17:40Z`).
+- [x] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
+  - Evidence: Colony task note recorded PR #495 merge and cleanup state.
+- [x] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).
+  - Evidence: `git worktree list` shows only `/home/deadpool/Documents/recodee/gitguardex`; local and remote `agent/codex/improve-gx-launcher-pane-management-ux-2026-04-30-12-02` refs are absent.
