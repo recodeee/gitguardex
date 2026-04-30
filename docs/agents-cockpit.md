@@ -29,7 +29,7 @@ By default this creates or reuses a tmux session named `guardex` in the
 repo root and opens a control pane running:
 
 ```bash
-gx agents status
+gx cockpit control --target <repo>
 ```
 
 Useful variants:
@@ -38,11 +38,17 @@ Useful variants:
 gx cockpit --session guardex-dev
 gx cockpit --session guardex-dev --attach
 gx cockpit --target /path/to/repo
+gx cockpit --backend auto
+gx cockpit --backend kitty
+gx cockpit --backend tmux
 ```
 
-`gx cockpit` requires tmux. If tmux is missing, GitGuardex exits with a
-clear install-and-retry error instead of falling back to a half-working
-session.
+`gx cockpit` supports `--backend auto|kitty|tmux`. The default remains
+tmux unless `GUARDEX_COCKPIT_BACKEND` is set. `auto` uses Kitty when
+Kitty remote control answers and otherwise falls back to tmux. Kitty
+mode requires Kitty remote control. tmux remains supported, and the
+backend choice does not change the safety model: branches, worktrees,
+locks, PR-only finish, and cleanup rules stay the same.
 
 ## Start agent lanes
 
